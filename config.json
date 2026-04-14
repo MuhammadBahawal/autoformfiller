@@ -1,0 +1,134 @@
+{
+  "adspower": {
+    "base_url": "http://local.adspower.net:50325",
+    "api_key": "",
+    "use_active_profiles": true,
+    "profile_ids": [],
+    "keep_browser_open": false
+  },
+  "excel": {
+    "path": "D:/formfilling/data.xlsx",
+    "sheet_name": "Sheet1",
+    "header_row": 1,
+    "first_data_row": 2,
+    "status_column": "__status",
+    "message_column": "__message",
+    "processed_at_column": "__processed_at",
+    "profile_column": "__profile_id"
+  },
+  "form": {
+    "use_existing_page": true,
+    "tab_index": -1,
+    "target_url_contains": "stimulusassistforall.com/index-form.php",
+    "url": "",
+    "page_load_timeout_seconds": 30,
+    "field_timeout_seconds": 15,
+    "post_submit_wait_seconds": 3,
+    "return_to_form_before_each_row": true,
+    "submit_after_fill": true,
+    "submit_selector": "id=submit-btn",
+    "success_wait_selector": "",
+    "checkboxes": [
+      {
+        "selector": "id=form-optin",
+        "checked": true
+      }
+    ]
+  },
+  "worker": {
+    "retry_count": 1,
+    "max_rows_per_profile": 1
+  },
+  "fields": [
+    {
+      "column": "FIRST",
+      "type": "text",
+      "selectors": [
+        "id=first"
+      ]
+    },
+    {
+      "column": "LAST",
+      "type": "text",
+      "selectors": [
+        "id=last"
+      ]
+    },
+    {
+      "column": "ADDRESS",
+      "type": "text",
+      "selectors": [
+        "id=address"
+      ]
+    },
+    {
+      "column": "ZIP",
+      "type": "text",
+      "selectors": [
+        "id=zip"
+      ]
+    },
+    {
+      "column": "EMAIL",
+      "type": "text",
+      "selectors": [
+        "id=email"
+      ]
+    },
+    {
+      "column": "PHONE",
+      "type": "text",
+      "selectors": [
+        "id=phone"
+      ]
+    },
+    {
+      "column": "DOB",
+      "transform": "date_month_number",
+      "type": "select_text",
+      "selectors": [
+        "id=birth_month"
+      ]
+    },
+    {
+      "column": "DOB",
+      "transform": "date_day_number",
+      "type": "select_text",
+      "selectors": [
+        "id=birth_day"
+      ]
+    },
+    {
+      "column": "DOB",
+      "transform": "date_year",
+      "type": "select_text",
+      "selectors": [
+        "id=birth_year"
+      ]
+    },
+    {
+      "column": "GENDER",
+      "excel_column_letter": "H",
+      "type": "hidden_text",
+      "selectors": [
+        "id=gender"
+      ]
+    },
+    {
+      "column": "CITY",
+      "excel_column_letter": "I",
+      "type": "hidden_text",
+      "selectors": [
+        "id=city"
+      ]
+    },
+    {
+      "column": "STATE",
+      "excel_column_letter": "J",
+      "type": "hidden_text",
+      "selectors": [
+        "id=state"
+      ]
+    }
+  ]
+}
