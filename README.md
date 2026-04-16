@@ -33,9 +33,14 @@ Copy-Item config.example.json config.json
 - `form.use_existing_page`: keep this `true` if you open the form manually inside AdsPower before running the script.
 - `form.tab_index`: controls which browser tab contains the form. `-1` means the last/opened tab.
 - `form.url`: only use this when you want the script to open the form URL by itself for each row.
+- `form.target_url_contains`: keep this aligned with the real first-step form page, for example `stimulusassistforall.com/index-v8-form.php`. If this is wrong, one browser may work while other open browsers stay on the wrong tab.
 - `fields`: verify that the Excel column names and form selectors match your real form.
 - `form.submit_after_fill`: keep this `false` while testing if you do not want to submit immediately.
 - `form.submit_selector`: once testing is correct, set the real submit button selector and enable `submit_after_fill`.
+- `form.history_recover_max_steps`: if a browser was left on a survey or offers page, the script can try a few `Back` steps to return that browser to the form automatically.
+- `form.zip_step`: leave this enabled when some forms first show only the ZIP field. The script will fill ZIP, wait for the button to become ready, retry `Next` / `Continue` if needed, then fill the remaining fields on the next page. If the button text is unusual, add its selector in `form.zip_step.next_selectors`.
+- `form.handle_surveys_after_submit`: keeps the post-submit survey handler on. It is designed for button-style survey choices, radio groups, checkbox lists, `Continue` / `Next` pages, and final CTA pages such as `Get`, `Claim`, `Finish`, or `Complete`.
+- `form.survey_retry_count` / `form.survey_max_pages`: control how many survey reload retries are allowed and how many survey pages each browser will process before failing.
 
 Important:
 
@@ -60,6 +65,14 @@ The current config uses `max_rows_per_profile = 1`, so on each run:
 - Only as many rows are processed as there are available AdsPower browsers
 - Each browser fills only 1 row
 - The configured `Continue` or submit action is triggered
+- As soon as the main form submit reaches the next post-submit/survey page, the Excel row is marked `DONE`.
+- After the main form submit, the script can keep answering the follow-up survey until it reaches the next step or a completion/final CTA page.
+- Built-in survey answer rules now work like this:
+  - `what is your current employment status` -> choose `Employed`
+  - `do you own an active bank account` -> choose `Yes`
+  - otherwise the script prefers `None of the Above`, `None Above`, `No Above`, `Never`, `No`, `None`, or `Not Applicable`
+  - if none of those answers are visible, it selects one random visible option only
+- Radio options, checkbox options, and button-style answers are supported, and checkbox/radio groups are kept to a single selected answer.
 - The processed row is marked `DONE` in Excel
 - Remaining rows stay pending for the next run
 

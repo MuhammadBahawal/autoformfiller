@@ -1,0 +1,2 @@
+what is your current employment status employed? answer -> employed
+do you own an active bank account? answer -> yes

@@ -7,7 +7,7 @@
     "keep_browser_open": false
   },
   "excel": {
-    "path": "D:/formfilling/data.xlsx",
+    "path": "D:/autoformfiller/data.xlsx",
     "sheet_name": "Sheet1",
     "header_row": 1,
     "first_data_row": 2,
@@ -19,15 +19,38 @@
   "form": {
     "use_existing_page": true,
     "tab_index": -1,
-    "target_url_contains": "stimulusassistforall.com/index-form.php",
+    "target_url_contains": "stimulusassistforall.com/index-v8-form.php",
     "url": "",
     "page_load_timeout_seconds": 30,
     "field_timeout_seconds": 15,
     "post_submit_wait_seconds": 3,
+    "handle_surveys_after_submit": true,
+    "survey_max_pages": 12,
+    "survey_retry_count": 2,
+    "survey_step_wait_seconds": 1.5,
     "return_to_form_before_each_row": true,
+    "history_recover_max_steps": 3,
     "submit_after_fill": true,
     "submit_selector": "id=submit-btn",
     "success_wait_selector": "",
+    "zip_step": {
+      "enabled": true,
+      "field_columns": [
+        "ZIP"
+      ],
+      "next_selectors": [],
+      "next_keywords": [
+        "next",
+        "continue",
+        "proceed"
+      ],
+      "detection_wait_seconds": 1.5,
+      "after_fill_wait_seconds": 0.75,
+      "action_ready_wait_seconds": 5,
+      "advance_retry_count": 3,
+      "retry_pause_seconds": 1,
+      "transition_wait_seconds": 15
+    },
     "checkboxes": [
       {
         "selector": "id=form-optin",
