@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import random
 import re
 import threading
@@ -28,6 +27,7 @@ TRACKING_DEFAULTS = {
     "processed_at_column": "__processed_at",
     "profile_column": "__profile_id",
 }
+DEFAULT_TERMINAL_ROW_STATUSES = ("DONE", "FAILED")
 
 SURVEY_DEFAULT_OPTION_PRIORITY = (
     "none of the above",
@@ -151,6 +151,10 @@ class SurveyPageContext:
         return self.button_options
 
 
+class InvalidRowDataError(RuntimeError):
+    """Raised when the current Excel row keeps the browser on the same form."""
+
+
 def log(message: str) -> None:
     timestamp = datetime.now().strftime("%H:%M:%S")
     print(f"[{timestamp}] {message}", flush=True)
@@ -226,6 +230,12 @@ class ExcelTracker:
         self.message_column_name = tracking["message_column"]
         self.processed_at_column_name = tracking["processed_at_column"]
         self.profile_column_name = tracking["profile_column"]
+        configured_skip_statuses = excel_config.get("skip_statuses") or DEFAULT_TERMINAL_ROW_STATUSES
+        self.skip_statuses = {
+            str(status).strip().upper()
+            for status in configured_skip_statuses
+            if str(status).strip()
+        }
 
         self.lock = threading.Lock()
         self.workbook = load_workbook(self.path)
@@ -308,7 +318,7 @@ class ExcelTracker:
             if is_empty:
                 continue
             status_value = cell_to_string(self.sheet.cell(row=row_number, column=status_col_idx).value).upper()
-            if status_value == "DONE":
+            if status_value in self.skip_statuses:
                 continue
             tasks.append(RowTask(row_number=row_number, values=row_values))
         return tasks
@@ -353,8 +363,9 @@ class ExcelTracker:
             message_col = self._header_index_by_normalized[normalize_key(self.message_column_name)]
             processed_at_col = self._header_index_by_normalized[normalize_key(self.processed_at_column_name)]
             profile_col = self._header_index_by_normalized[normalize_key(self.profile_column_name)]
+            normalized_status = str(status or "").strip().upper()
 
-            self.sheet.cell(row=row_number, column=status_col, value=status)
+            self.sheet.cell(row=row_number, column=status_col, value=normalized_status)
             self.sheet.cell(row=row_number, column=message_col, value=message[:30000])
             self.sheet.cell(
                 row=row_number,
@@ -636,6 +647,68 @@ def page_has_configured_field(driver: webdriver.Chrome, fields: list[dict[str, A
         if field_is_visible_now(driver, field_config):
             return True
     return False
+
+
+def page_still_shows_form(driver: webdriver.Chrome, form_config: dict[str, Any]) -> bool:
+    fields = form_config.get("__resolved_fields__") or []
+    if fields and page_has_configured_field(driver, fields):
+        return True
+
+    submit_selector = str(form_config.get("submit_selector", "")).strip()
+    if submit_selector and try_find_first_element(driver, [submit_selector], require_displayed=True) is not None:
+        return True
+
+    return False
+
+
+def get_form_validation_summary(driver: webdriver.Chrome) -> str:
+    try:
+        messages = driver.execute_script(
+            """
+            const selectors = [
+                '.error',
+                '.errors',
+                '.error-message',
+                '.invalid-feedback',
+                '.validation-error',
+                '.form-error',
+                '[role="alert"]',
+                '[aria-live="assertive"]',
+                '[aria-invalid="true"]',
+            ];
+            const results = [];
+            const seen = new Set();
+
+            function push(text) {
+                const cleaned = (text || '').replace(/\\s+/g, ' ').trim();
+                if (!cleaned) {
+                    return;
+                }
+                const key = cleaned.toLowerCase();
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    results.push(cleaned);
+                }
+            }
+
+            for (const selector of selectors) {
+                for (const node of document.querySelectorAll(selector)) {
+                    const style = window.getComputedStyle(node);
+                    if (style && (style.display === 'none' || style.visibility === 'hidden')) {
+                        continue;
+                    }
+                    push(node.innerText || node.textContent || node.value || '');
+                }
+            }
+
+            return results.slice(0, 4);
+            """,
+        )
+    except WebDriverException:
+        return ""
+
+    cleaned_messages = [str(item).strip() for item in messages or [] if str(item).strip()]
+    return " | ".join(cleaned_messages)
 
 
 def get_choice_click_target(driver: webdriver.Chrome, choice_input):
@@ -1123,6 +1196,29 @@ def wait_for_page_change(
     return False
 
 
+def form_submit_advanced(
+    driver: webdriver.Chrome,
+    form_config: dict[str, Any],
+    submit_reference: tuple[str, str, tuple[str, ...]],
+    timeout_seconds: float,
+) -> bool:
+    _, _, previous_handles = submit_reference
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        try:
+            current_handles = tuple(driver.window_handles)
+        except WebDriverException:
+            return True
+
+        if current_handles != previous_handles:
+            return True
+        if not page_still_shows_form(driver, form_config):
+            return True
+        time.sleep(0.25)
+
+    return not page_still_shows_form(driver, form_config)
+
+
 def retry_survey_page(driver: webdriver.Chrome) -> None:
     time.sleep(random.uniform(5, 7))
     driver.refresh()
@@ -1306,13 +1402,22 @@ def handle_post_submit_surveys(
         page_text = context.page_text
         actions = context.actions
         survey_options = context.survey_options
+        current_page_shows_form = page_still_shows_form(driver, form_config)
+
+        if pages_completed == 0 and current_page_shows_form:
+            validation_summary = get_form_validation_summary(driver)
+            if validation_summary:
+                raise InvalidRowDataError(
+                    f"Form is still visible after submit. Row data may be invalid. Validation: {validation_summary}"
+                )
+            raise InvalidRowDataError("Form is still visible after submit. Row data may be invalid.")
 
         page_changed_after_submit = True
         if submit_reference is not None:
             submit_url, submit_text, submit_handles = submit_reference
             page_changed_after_submit = page_state_changed(driver, submit_url, submit_text, submit_handles)
 
-        if not submit_marked_done:
+        if not submit_marked_done and not current_page_shows_form:
             if survey_options or page_looks_complete(page_text):
                 mark_submit_completed("submitted; survey page reached")
             elif page_changed_after_submit and (
@@ -1384,6 +1489,13 @@ def handle_post_submit_surveys(
                 continue
 
             if pages_completed == 0:
+                if current_page_shows_form:
+                    validation_summary = get_form_validation_summary(driver)
+                    if validation_summary:
+                        raise InvalidRowDataError(
+                            f"Form is still visible after submit. Row data may be invalid. Validation: {validation_summary}"
+                        )
+                    raise InvalidRowDataError("Form is still visible after submit. Row data may be invalid.")
                 return "submitted; no survey detected"
             return f"submitted; survey handled across {pages_completed} page(s)"
 
@@ -1948,6 +2060,22 @@ def open_form(
             driver.set_page_load_timeout(page_load_timeout)
             driver.get(runtime_state.last_form_url)
             remember_form_location(driver, form_config, runtime_state)
+            return
+
+        fallback_url = str(form_config.get("url", "")).strip()
+        if not found_target and fallback_url:
+            log(f"Open form fallback: navigating current browser to configured form.url")
+            page_load_timeout = int(form_config.get("page_load_timeout_seconds", 30))
+            driver.set_page_load_timeout(page_load_timeout)
+            driver.get(fallback_url)
+            remember_form_location(driver, form_config, runtime_state)
+            return
+
+        if not found_target:
+            raise RuntimeError(
+                "No open form page was found in this browser. Open the real form in every AdsPower browser, "
+                "or set form.url in config.json so the script can reopen it automatically."
+            )
         return
 
     target_url = str(form_config["url"]).strip()
@@ -1996,6 +2124,19 @@ def process_row(
             tuple(driver.window_handles),
         )
         submit_form(driver, form_config, timeout_seconds)
+        submit_transition_wait = float(
+            form_config.get("submit_transition_wait_seconds", max(timeout_seconds, 5))
+        )
+        if not form_submit_advanced(driver, form_config, submit_reference, submit_transition_wait):
+            validation_summary = get_form_validation_summary(driver)
+            if validation_summary:
+                raise InvalidRowDataError(
+                    "Form stayed on the same page after submit. Row data may be invalid. "
+                    f"Validation: {validation_summary}"
+                )
+            raise InvalidRowDataError(
+                "Form stayed on the same page after submit. Row data may be invalid, so this browser will try another pending row."
+            )
         return handle_post_submit_surveys(
             driver,
             form_config,
@@ -2015,7 +2156,7 @@ def worker_loop(profile_target: dict[str, Any], assigned_tasks: list[RowTask], t
     connect_mode = str(profile_target.get("connect_mode", "start"))
 
     driver = None
-    processed_count = 0
+    successful_count = 0
     runtime_state = FormRuntimeState()
 
     try:
@@ -2030,8 +2171,8 @@ def worker_loop(profile_target: dict[str, Any], assigned_tasks: list[RowTask], t
             open_form(driver, config["form"], runtime_state)
 
         for row_task in assigned_tasks:
-            if max_rows_per_profile and processed_count >= max_rows_per_profile:
-                log(f"[{profile_id}] Reached max_rows_per_profile={max_rows_per_profile}")
+            if max_rows_per_profile and successful_count >= max_rows_per_profile:
+                log(f"[{profile_id}] Reached max_rows_per_profile={max_rows_per_profile} successful row(s)")
                 break
             result_status = "FAILED"
             result_message = ""
@@ -2064,6 +2205,12 @@ def worker_loop(profile_target: dict[str, Any], assigned_tasks: list[RowTask], t
                             f"Stopping follow-up retries: {exc}"
                         )
                         break
+                    if isinstance(exc, InvalidRowDataError):
+                        log(
+                            f"[{profile_id}] Row {row_task.row_number} has invalid form data. "
+                            f"Marking FAILED and moving to the next row: {exc}"
+                        )
+                        break
                     if attempt <= retry_count:
                         log(
                             f"[{profile_id}] Row {row_task.row_number} failed on attempt {attempt}: {exc}. Retrying..."
@@ -2073,7 +2220,8 @@ def worker_loop(profile_target: dict[str, Any], assigned_tasks: list[RowTask], t
                         log(f"[{profile_id}] Row {row_task.row_number} failed: {exc}")
 
             tracker.mark_result(row_task.row_number, result_status, result_message, profile_id)
-            processed_count += 1
+            if result_status == "DONE":
+                successful_count += 1
             if "final cta clicked" in result_message.lower() or "offer clicked" in result_message.lower():
                 log(f"[{profile_id}] Final offer page reached, stopping this browser worker.")
                 break
@@ -2155,27 +2303,14 @@ def resolve_profile_targets(config: dict[str, Any]) -> list[dict[str, Any]]:
 def build_profile_assignments(
     selected_profile_targets: list[dict[str, Any]],
     selected_tasks: list[RowTask],
-    max_rows_per_profile: int,
 ) -> list[tuple[dict[str, Any], list[RowTask]]]:
     if not selected_profile_targets or not selected_tasks:
         return []
 
-    if max_rows_per_profile <= 0:
-        assignments = [(profile_target, []) for profile_target in selected_profile_targets]
-        for index, row_task in enumerate(selected_tasks):
-            assignments[index % len(assignments)][1].append(row_task)
-        return [(profile_target, assigned) for profile_target, assigned in assignments if assigned]
-
-    assignments: list[tuple[dict[str, Any], list[RowTask]]] = []
-    start_index = 0
-    rows_per_profile = max_rows_per_profile
-    for profile_target in selected_profile_targets:
-        assigned = selected_tasks[start_index : start_index + rows_per_profile]
-        if not assigned:
-            break
-        assignments.append((profile_target, assigned))
-        start_index += rows_per_profile
-    return assignments
+    assignments = [(profile_target, []) for profile_target in selected_profile_targets]
+    for index, row_task in enumerate(selected_tasks):
+        assignments[index % len(assignments)][1].append(row_task)
+    return [(profile_target, assigned) for profile_target, assigned in assignments if assigned]
 
 
 def run(config_path: Path) -> None:
@@ -2187,24 +2322,24 @@ def run(config_path: Path) -> None:
 
     pending_tasks = tracker.build_pending_tasks()
     if not pending_tasks:
-        log("No pending Excel rows found. Rows marked DONE are skipped automatically.")
+        skipped_text = ", ".join(sorted(tracker.skip_statuses)) or "DONE"
+        log(f"No pending Excel rows found. Rows marked {skipped_text} are skipped automatically.")
         return
 
     max_rows_per_profile = int(config.get("worker", {}).get("max_rows_per_profile", 0))
+    selected_tasks = pending_tasks
     if max_rows_per_profile > 0:
-        run_row_cap = len(profile_targets) * max_rows_per_profile
-        selected_tasks = pending_tasks[:run_row_cap]
-        workers_needed = math.ceil(len(selected_tasks) / max_rows_per_profile) if selected_tasks else 0
-        selected_profile_targets = profile_targets[:workers_needed]
+        success_target = min(len(pending_tasks), len(profile_targets) * max_rows_per_profile)
+        selected_profile_targets = profile_targets[: min(len(profile_targets), len(pending_tasks))]
     else:
-        selected_tasks = pending_tasks
+        success_target = len(pending_tasks)
         selected_profile_targets = profile_targets
 
-    assignments = build_profile_assignments(selected_profile_targets, selected_tasks, max_rows_per_profile)
+    assignments = build_profile_assignments(selected_profile_targets, selected_tasks)
 
     log(
         f"Found {len(pending_tasks)} pending rows and {len(profile_targets)} AdsPower browser(s). "
-        f"This run will process up to {len(selected_tasks)} row(s)."
+        f"This run will target up to {success_target} successful row(s) and may try extra rows when a form stays on the same page."
     )
 
     threads: list[threading.Thread] = []
