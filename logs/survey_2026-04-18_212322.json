@@ -1,0 +1,62 @@
+[
+  {
+    "profile_id": "k1bmrgoa",
+    "state": "stuck",
+    "questions_answered": 1,
+    "url": "https://18.stimulusassistforall.com/offers-flow.php",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Required checkbox answer 'Employed' not found in visible options: 1 1; 1 1; 1 1; 1 1; 1 1; 1 1; 1 1; 1 0",
+    "timestamp": "2026-04-18 21:20:52",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bmrgo8",
+    "state": "stuck",
+    "questions_answered": 1,
+    "url": "https://18.stimulusassistforall.com/offers-flow.php",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Required checkbox answer 'Employed' not found in visible options: 1 1; 1 1; 1 1; 1 1; 1 1; 1 1; 1 1; 1 0",
+    "timestamp": "2026-04-18 21:20:52",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bmrgo9",
+    "state": "completed",
+    "questions_answered": 3,
+    "url": "https://18.stimulusassistforall.com/offers-flow.php?pageid=341",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Survey completed successfully",
+    "timestamp": "2026-04-18 21:21:01",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bmrgoc",
+    "state": "completed",
+    "questions_answered": 7,
+    "url": "https://18.stimulusassistforall.com/offers-flow.php?pageid=341",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Survey completed successfully",
+    "timestamp": "2026-04-18 21:21:19",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bmrgob",
+    "state": "stuck",
+    "questions_answered": 21,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-18 21:22:50",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bmrgod",
+    "state": "stuck",
+    "questions_answered": 29,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=a6877fec9e1042d9abc5aa545efbbec3&subaff1=872&subaff2=1532&zip=16935&lastName=Egan&gender=m&city=MIDDLEBURY%20CENTER&address1=773%20Stoney%20Lonesome%20Rd&dobDay=14&firstName=Heidi&phoneNumber=5703760704&state=PA&dobMonth=04&dobYear=1972&age=54&email=heidiegan%40gmail.com",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-18 21:23:22",
+    "screenshot_path": ""
+  }
+]

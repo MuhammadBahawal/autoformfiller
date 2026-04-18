@@ -1,0 +1,32 @@
+[
+  {
+    "profile_id": "k1bmp149",
+    "state": "stuck",
+    "questions_answered": 26,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=9e4d6c8bcb9541e9934545864939bfa5&subaff1=872&subaff2=1532&zip=29924&lastName=Orton&gender=m&city=HAMPTON&address1=114%204th%20St&dobDay=04&firstName=William&phoneNumber=8039433833&state=SC&dobMonth=08&dobYear=1987&age=38&email=massaro%40gmail.com",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-18 21:11:04",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bmp146",
+    "state": "stuck",
+    "questions_answered": 29,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-18 21:12:01",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bmp14b",
+    "state": "stuck",
+    "questions_answered": 29,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=47ecefb7011845c8b4e6590cabdd7462&subaff1=872&subaff2=1532&zip=32223&lastName=Mcgee&gender=f&city=JACKSONVILLE&address1=338%20W%20Cottage%20Pl&dobDay=10&firstName=Richard&phoneNumber=9046518325&state=FL&dobYear=1986&dobMonth=09&email=rgalentine%40gmail.com&age=39",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-18 21:12:02",
+    "screenshot_path": ""
+  }
+]

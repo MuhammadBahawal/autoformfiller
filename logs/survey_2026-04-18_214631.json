@@ -1,0 +1,52 @@
+[
+  {
+    "profile_id": "k1bms4fl",
+    "state": "completed",
+    "questions_answered": 8,
+    "url": "https://18.stimulusassistforall.com/offers-flow.php?pageid=341",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Survey completed successfully",
+    "timestamp": "2026-04-18 21:44:19",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bms4fi",
+    "state": "completed",
+    "questions_answered": 7,
+    "url": "https://18.stimulusassistforall.com/offers-flow.php?pageid=341",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Survey completed successfully",
+    "timestamp": "2026-04-18 21:44:31",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bms4fj",
+    "state": "stuck",
+    "questions_answered": 27,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-18 21:46:17",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bms4fg",
+    "state": "stuck",
+    "questions_answered": 28,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-18 21:46:27",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bms4fk",
+    "state": "stuck",
+    "questions_answered": 29,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-18 21:46:31",
+    "screenshot_path": ""
+  }
+]

@@ -28,6 +28,16 @@ TRACKING_DEFAULTS = {
     "profile_column": "__profile_id",
 }
 
+DEFAULT_VALIDATION_ERROR_SELECTORS = [
+    "[aria-invalid='true']",
+    ".invalid-feedback",
+    ".field-validation-error",
+    ".validation-error",
+    ".error-message",
+    ".parsley-errors-list",
+    ".parsley-error",
+]
+
 
 @dataclass
 class RowTask:
@@ -378,6 +388,160 @@ def find_first_element(
     raise TimeoutException(f"Element not found for selectors: {selector_text}")
 
 
+def find_visible_elements_now(
+    driver: webdriver.Chrome,
+    selectors: list[str],
+    require_displayed: bool = True,
+) -> list[Any]:
+    visible_elements: list[Any] = []
+    for selector in selectors:
+        by, query = parse_selector(selector)
+        try:
+            matches = driver.find_elements(by, query)
+        except WebDriverException:
+            continue
+        for element in matches:
+            try:
+                if not require_displayed or element.is_displayed():
+                    visible_elements.append(element)
+            except WebDriverException:
+                continue
+    return visible_elements
+
+
+def build_submission_guard_selectors(form_config: dict[str, Any], fields: list[dict[str, Any]]) -> list[str]:
+    selectors: list[str] = []
+    for field in fields:
+        if str(field.get("type", "text")).strip().lower() == "hidden_text":
+            continue
+        selectors.extend(field.get("selectors") or [])
+
+    submit_selector = str(form_config.get("submit_selector", "")).strip()
+    if submit_selector:
+        selectors.append(submit_selector)
+
+    for checkbox in form_config.get("checkboxes", []):
+        selectors.extend(checkbox.get("selectors") or ([checkbox["selector"]] if checkbox.get("selector") else []))
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for selector in selectors:
+        normalized = selector.strip()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            deduped.append(normalized)
+    return deduped
+
+
+def collect_validation_failures(driver: webdriver.Chrome, form_config: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+
+    try:
+        invalid_fields = driver.execute_script(
+            """
+            return Array.from(document.querySelectorAll(':invalid'))
+                .filter((el) => {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return rect.width > 0
+                        && rect.height > 0
+                        && style.display !== 'none'
+                        && style.visibility !== 'hidden';
+                })
+                .slice(0, 5)
+                .map((el) => {
+                    const labelText = el.labels && el.labels.length
+                        ? Array.from(el.labels).map((label) => label.innerText || label.textContent || '').join(' ').trim()
+                        : '';
+                    const nameText = el.getAttribute('name') || el.id || el.getAttribute('placeholder') || el.type || 'field';
+                    const title = (labelText || nameText || 'field').trim();
+                    const message = (el.validationMessage || '').trim();
+                    return message ? `${title}: ${message}` : title;
+                });
+            """
+        )
+        for item in invalid_fields or []:
+            text = str(item).strip()
+            if text:
+                reasons.append(text)
+    except WebDriverException:
+        pass
+
+    error_selectors = form_config.get("validation_error_selectors") or DEFAULT_VALIDATION_ERROR_SELECTORS
+    for element in find_visible_elements_now(driver, [str(selector) for selector in error_selectors]):
+        try:
+            text = " ".join(
+                part.strip()
+                for part in (
+                    element.text or "",
+                    element.get_attribute("aria-label") or "",
+                    element.get_attribute("title") or "",
+                )
+                if part and part.strip()
+            )
+        except WebDriverException:
+            text = ""
+        if text:
+            reasons.append(text[:200])
+
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for reason in reasons:
+        normalized = reason.strip()
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            deduped.append(normalized)
+    return deduped
+
+
+def wait_for_submit_result(
+    driver: webdriver.Chrome,
+    form_config: dict[str, Any],
+    fields: list[dict[str, Any]],
+    timeout_seconds: int,
+    old_url: str,
+    old_source_hash: int,
+) -> None:
+    guard_selectors = build_submission_guard_selectors(form_config, fields)
+    wait_seconds = max(
+        float(form_config.get("post_submit_wait_seconds", 3)),
+        float(form_config.get("submit_result_timeout_seconds", timeout_seconds)),
+    )
+    deadline = time.time() + wait_seconds
+
+    while time.time() < deadline:
+        validation_failures = collect_validation_failures(driver, form_config)
+        if validation_failures:
+            raise ValueError(f"Form validation blocked submit: {' | '.join(validation_failures[:3])}")
+
+        try:
+            current_url = driver.current_url
+        except WebDriverException:
+            current_url = old_url
+        try:
+            current_source_hash = hash(driver.page_source)
+        except WebDriverException:
+            current_source_hash = old_source_hash
+
+        form_still_visible = bool(find_visible_elements_now(driver, guard_selectors)) if guard_selectors else False
+        page_changed = current_url != old_url or current_source_hash != old_source_hash
+
+        if page_changed and not form_still_visible:
+            return
+
+        if not form_still_visible:
+            return
+
+        time.sleep(0.25)
+
+    validation_failures = collect_validation_failures(driver, form_config)
+    if validation_failures:
+        raise ValueError(f"Form validation blocked submit: {' | '.join(validation_failures[:3])}")
+
+    if guard_selectors and find_visible_elements_now(driver, guard_selectors):
+        raise ValueError("Submit was clicked but the lead form is still visible, so the row did not continue.")
+
+
 def set_input_value(driver: webdriver.Chrome, element, value: str) -> None:
     driver.execute_script(
         """
@@ -490,10 +654,24 @@ def apply_static_checkboxes(driver: webdriver.Chrome, form_config: dict[str, Any
         set_checkbox_state(driver, selectors, desired_state, timeout_seconds)
 
 
-def submit_form(driver: webdriver.Chrome, form_config: dict[str, Any], timeout_seconds: int) -> None:
+def submit_form(
+    driver: webdriver.Chrome,
+    form_config: dict[str, Any],
+    fields: list[dict[str, Any]],
+    timeout_seconds: int,
+) -> None:
     submit_selector = str(form_config.get("submit_selector", "")).strip()
     if not submit_selector:
         raise ValueError("submit_after_fill is enabled but form.submit_selector is empty")
+
+    try:
+        old_url = driver.current_url
+    except WebDriverException:
+        old_url = ""
+    try:
+        old_source_hash = hash(driver.page_source)
+    except WebDriverException:
+        old_source_hash = 0
 
     button = find_first_element(driver, [submit_selector], timeout_seconds)
     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", button)
@@ -507,7 +685,14 @@ def submit_form(driver: webdriver.Chrome, form_config: dict[str, Any], timeout_s
         find_first_element(driver, [success_wait_selector], timeout_seconds)
         return
 
-    time.sleep(float(form_config.get("post_submit_wait_seconds", 3)))
+    wait_for_submit_result(
+        driver=driver,
+        form_config=form_config,
+        fields=fields,
+        timeout_seconds=timeout_seconds,
+        old_url=old_url,
+        old_source_hash=old_source_hash,
+    )
 
 
 def focus_browser_tab(driver: webdriver.Chrome, form_config: dict[str, Any]) -> None:
@@ -564,7 +749,7 @@ def process_row(
     apply_static_checkboxes(driver, form_config, timeout_seconds)
 
     if form_config.get("submit_after_fill", False):
-        submit_form(driver, form_config, timeout_seconds)
+        submit_form(driver, form_config, fields, timeout_seconds)
         return "submitted"
 
     return "filled (submit disabled)"

@@ -827,17 +827,45 @@ class SurveyWorker:
             return ""
 
     def _find_element_by_text(self, elements: list[WebElement], target_text: str) -> WebElement | None:
-        """Find an element whose text matches target_text (case-insensitive, partial match)."""
+        """Find an element whose text best matches target_text."""
         target_normalized = normalize_text(target_text).lower()
-        
+        if not target_normalized:
+            return None
+
+        exact_matches: list[WebElement] = []
+        word_matches: list[WebElement] = []
+        partial_matches: list[WebElement] = []
+        target_words = target_normalized.split()
+
         for el in elements:
             try:
                 el_text = self._get_element_match_text(el).lower()
-                if el_text and target_normalized in el_text:
-                    return el
+                if not el_text:
+                    continue
+
+                if el_text == target_normalized:
+                    exact_matches.append(el)
+                    continue
+
+                if re.search(rf"\b{re.escape(target_normalized)}\b", el_text):
+                    word_matches.append(el)
+                    continue
+
+                if len(target_words) > 1 and all(word in el_text for word in target_words):
+                    partial_matches.append(el)
+                    continue
+
+                if len(target_normalized) > 3 and target_normalized in el_text:
+                    partial_matches.append(el)
             except WebDriverException:
                 continue
-        
+
+        if exact_matches:
+            return exact_matches[0]
+        if word_matches:
+            return word_matches[0]
+        if partial_matches:
+            return partial_matches[0]
         return None
 
     def _get_preferred_random_option(self, elements: list[WebElement]) -> WebElement | None:

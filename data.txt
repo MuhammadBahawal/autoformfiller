@@ -13,4 +13,6 @@ which of the below resources could you benefit from? answer -> None of the above
 are you interested in continuing education? answer -> No
 are you interested any of the folowing ? answer -> None of the above
 do you have a greate idea of innovation ? answer -> No
-Are you unable to work due to a disability and are expected to be out of work for at least 1 year? answer -> No
+are you unable to work due to a disability and are expected to be out of work for at least 1 year? answer -> No
+and are you unable to work due to a disability and are expected to be out of work for at least 1 year? answer -> No
+feel the flavour the spring answer -> No
