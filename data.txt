@@ -1,2 +1,16 @@
-what is your current employment status employed? answer -> employed
+have you or your loved one suffered complications or harm from any of the following? answer -> none of the above
+what is your current employment status? answer -> Employed
+what is your current employment statur? answer -> Employed
+which best describes your health insurance coverage? answer -> medicare
+are you considering any of the following home improvement projects? answer -> none of the above
+have you been hurt in any of the following due to someone else's fault in the last 2 years and would like to speak to an attorney regarding your accident? answer -> no , not injured in Accident
+which type of debt do you owe the most on right now? answer -> None
+which type of debit do you owe the most on right now? answer -> None
 do you own an active bank account? answer -> yes
+do you own your home? answer -> No I do not own my home
+how many vehicles do you own? answer -> skip
+which of the below resources could you benefit from? answer -> None of the above
+are you interested in continuing education? answer -> No
+are you interested any of the folowing ? answer -> None of the above
+do you have a greate idea of innovation ? answer -> No
+Are you unable to work due to a disability and are expected to be out of work for at least 1 year? answer -> No

@@ -1,0 +1,54 @@
+{
+  "adspower": {
+    "base_url": "http://local.adspower.net:50325",
+    "api_key": "",
+    "use_active_profiles": true,
+    "profile_ids": []
+  },
+  "survey": {
+    "data_file": "data.txt",
+    "max_questions": 100,
+    "wait_after_click_seconds": 3,
+    "element_timeout_seconds": 15,
+    "max_stuck_retries": 10,
+    "stuck_wait_seconds": 5,
+    "screenshot_on_completion": true,
+    "screenshot_directory": "screenshots",
+    "log_directory": "logs",
+    "target_url_contains": "",
+    "tab_index": -1,
+    "completion_keywords": [
+      "thank you for completing",
+      "thank you for your time",
+      "thank you for participating",
+      "thanks for completing",
+      "survey is complete",
+      "survey completed",
+      "you have finished",
+      "your response has been recorded",
+      "your answers have been submitted",
+      "your reward",
+      "you will receive",
+      "points have been",
+      "congratulations"
+    ],
+    "weak_completion_keywords": [
+      "your reward",
+      "you will receive",
+      "points have been"
+    ],
+    "skip_keywords": [
+      "disqualified",
+      "not eligible",
+      "screened out",
+      "sorry",
+      "not qualify",
+      "quota full"
+    ],
+    "strict_predefined_questions": [
+      "Do you own an active Bank Account?",
+      "what is your current employment statur?",
+      "what is your current employment status?"
+    ]
+  }
+}

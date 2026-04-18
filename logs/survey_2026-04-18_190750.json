@@ -1,0 +1,42 @@
+[
+  {
+    "profile_id": "k1bmn1ey",
+    "state": "stuck",
+    "questions_answered": 4,
+    "url": "devtools://devtools/bundled/devtools_app.html?remoteBase=https://chrome-devtools-frontend.appspot.com/serve_file/@45ae0176a7f4615fc840d539d26f8ad6ebd76c45/&targetType=tab&can_dock=true&ads_mobile=true&mobileDevMode=true&disableJsDebugger=false&refusejsdebugger=true",
+    "title": "DevTools",
+    "message": "Stuck after 5 retries — no question elements found",
+    "timestamp": "2026-04-18 19:07:50",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bmn1ex",
+    "state": "stuck",
+    "questions_answered": 4,
+    "url": "devtools://devtools/bundled/devtools_app.html?remoteBase=https://chrome-devtools-frontend.appspot.com/serve_file/@d4a81ee151328e064edff2436937ec44bc55eea0/&targetType=tab&can_dock=true&ads_mobile=true&mobileDevMode=true&disableJsDebugger=false&refusejsdebugger=true",
+    "title": "DevTools",
+    "message": "Stuck after 5 retries — no question elements found",
+    "timestamp": "2026-04-18 19:07:50",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bmn1f0",
+    "state": "stuck",
+    "questions_answered": 4,
+    "url": "devtools://devtools/bundled/devtools_app.html?remoteBase=https://chrome-devtools-frontend.appspot.com/serve_file/@45ae0176a7f4615fc840d539d26f8ad6ebd76c45/&targetType=tab&can_dock=true&ads_mobile=true&mobileDevMode=true&disableJsDebugger=false&refusejsdebugger=true",
+    "title": "DevTools",
+    "message": "Stuck after 5 retries — no question elements found",
+    "timestamp": "2026-04-18 19:07:50",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bmn1ev",
+    "state": "stuck",
+    "questions_answered": 4,
+    "url": "devtools://devtools/bundled/devtools_app.html?remoteBase=https://chrome-devtools-frontend.appspot.com/serve_file/@ed0a835928bfc328c9c2b8fd87e4e92af8e0ddd1/&targetType=tab&can_dock=true&ads_mobile=true&mobileDevMode=true&disableJsDebugger=false&refusejsdebugger=true",
+    "title": "DevTools",
+    "message": "Stuck after 5 retries — no question elements found",
+    "timestamp": "2026-04-18 19:07:50",
+    "screenshot_path": ""
+  }
+]
