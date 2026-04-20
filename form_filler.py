@@ -1,18 +1,24 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import math
+import os
 import re
+import shutil
 import threading
 import time
+import zipfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any
 
 import requests
 from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, WebDriverException
 from selenium.webdriver.chrome.options import Options
@@ -93,12 +99,156 @@ def load_config(config_path: Path) -> dict[str, Any]:
     return json.loads(config_path.read_text(encoding="utf-8"))
 
 
-def safe_save_workbook(workbook, path: Path) -> None:
+def get_excel_backup_path(path: Path) -> Path:
+    return path.with_name(f"{path.stem}.backup{path.suffix}")
+
+
+def get_excel_lock_path(path: Path) -> Path:
+    return path.with_name(f"{path.stem}.lock")
+
+
+def is_valid_excel_file(path: Path) -> bool:
+    if not path.exists() or not path.is_file():
+        return False
+    if not zipfile.is_zipfile(path):
+        return False
     try:
-        workbook.save(path)
+        with zipfile.ZipFile(path) as archive:
+            names = set(archive.namelist())
+            required_entries = {
+                "[Content_Types].xml",
+                "_rels/.rels",
+                "xl/workbook.xml",
+            }
+            return required_entries.issubset(names)
+    except (OSError, zipfile.BadZipFile, KeyError):
+        return False
+
+
+def is_process_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return True
+    return True
+
+
+def acquire_excel_lock(path: Path) -> Path:
+    path = Path(path)
+    lock_path = get_excel_lock_path(path)
+    payload = {
+        "pid": os.getpid(),
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "excel_path": str(path),
+    }
+
+    for _ in range(2):
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            with os.fdopen(fd, "w", encoding="utf-8") as lock_file:
+                json.dump(payload, lock_file, ensure_ascii=False)
+            return lock_path
+        except FileExistsError:
+            try:
+                existing_payload = json.loads(lock_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                existing_payload = {}
+
+            existing_pid = int(existing_payload.get("pid", 0) or 0)
+            if existing_pid and is_process_alive(existing_pid):
+                raise RuntimeError(
+                    f"Excel file '{path}' is already locked by another running agent process "
+                    f"(PID {existing_pid}). Wait for that run to finish before starting again."
+                )
+
+            try:
+                lock_path.unlink()
+            except OSError as exc:
+                raise RuntimeError(
+                    f"Excel lock file '{lock_path.name}' is stale but could not be removed: {exc}"
+                ) from exc
+
+    raise RuntimeError(f"Could not acquire Excel lock for '{path}'.")
+
+
+def release_excel_lock(lock_path: Path | None) -> None:
+    if not lock_path:
+        return
+    try:
+        if Path(lock_path).exists():
+            Path(lock_path).unlink()
+    except OSError:
+        pass
+
+
+def safe_save_workbook(workbook, path: Path) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    backup_path = get_excel_backup_path(path)
+    temp_path: Path | None = None
+
+    try:
+        with NamedTemporaryFile(
+            prefix=f"{path.stem}_",
+            suffix=path.suffix,
+            dir=path.parent,
+            delete=False,
+        ) as temp_file:
+            temp_path = Path(temp_file.name)
+
+        workbook.save(temp_path)
+
+        if not is_valid_excel_file(temp_path):
+            raise OSError(f"Temporary Excel save is invalid or incomplete: {temp_path}")
+
+        if is_valid_excel_file(path):
+            shutil.copy2(path, backup_path)
+
+        os.replace(temp_path, path)
+
+        if not is_valid_excel_file(path):
+            raise OSError(f"Excel save verification failed after replace: {path}")
     except PermissionError as exc:
         raise PermissionError(
             f"Cannot save Excel file '{path}'. Please close the Excel file and run the script again."
+        ) from exc
+    finally:
+        if temp_path and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
+
+
+def load_workbook_with_recovery(path: Path):
+    try:
+        return load_workbook(path)
+    except (InvalidFileException, zipfile.BadZipFile, OSError, KeyError) as exc:
+        backup_path = get_excel_backup_path(path)
+        if is_valid_excel_file(backup_path):
+            corrupt_copy = path.with_name(f"{path.stem}.corrupt{path.suffix}")
+            try:
+                if path.exists():
+                    shutil.copy2(path, corrupt_copy)
+            except OSError:
+                corrupt_copy = path
+
+            shutil.copy2(backup_path, path)
+            log(
+                f"WARNING: Excel file was corrupt. Restored backup from '{backup_path.name}'. "
+                f"Corrupt copy kept at '{corrupt_copy.name}'."
+            )
+            return load_workbook(path)
+
+        raise RuntimeError(
+            f"Excel file '{path}' is corrupt and no valid backup was found. "
+            f"Restore it manually, then re-run the script."
         ) from exc
 
 
@@ -107,30 +257,37 @@ class ExcelTracker:
         self.path = Path(excel_config["path"]).expanduser().resolve()
         if not self.path.exists():
             raise FileNotFoundError(f"Excel file not found: {self.path}")
+        self.lock_path = acquire_excel_lock(self.path)
+        self._closed = False
+        self.workbook = None
+        atexit.register(self.close)
+        try:
+            self.header_row = int(excel_config.get("header_row", 1))
+            self.first_data_row = int(excel_config.get("first_data_row", self.header_row + 1))
+            self.sheet_name = excel_config.get("sheet_name")
 
-        self.header_row = int(excel_config.get("header_row", 1))
-        self.first_data_row = int(excel_config.get("first_data_row", self.header_row + 1))
-        self.sheet_name = excel_config.get("sheet_name")
+            tracking = TRACKING_DEFAULTS | {
+                key: excel_config.get(key, default)
+                for key, default in TRACKING_DEFAULTS.items()
+            }
+            self.status_column_name = tracking["status_column"]
+            self.message_column_name = tracking["message_column"]
+            self.processed_at_column_name = tracking["processed_at_column"]
+            self.profile_column_name = tracking["profile_column"]
 
-        tracking = TRACKING_DEFAULTS | {
-            key: excel_config.get(key, default)
-            for key, default in TRACKING_DEFAULTS.items()
-        }
-        self.status_column_name = tracking["status_column"]
-        self.message_column_name = tracking["message_column"]
-        self.processed_at_column_name = tracking["processed_at_column"]
-        self.profile_column_name = tracking["profile_column"]
-
-        self.lock = threading.Lock()
-        self.workbook = load_workbook(self.path)
-        self.sheet = self.workbook[self.sheet_name] if self.sheet_name else self.workbook.active
-        self.max_column = self.sheet.max_column
-        self._header_index_by_normalized: dict[str, int] = {}
-        self._header_index_by_exact: dict[str, int] = {}
-        self._refresh_headers()
-        self._ensure_tracking_columns()
-        self._refresh_headers()
-        self.source_header_names = self._build_source_header_names()
+            self.lock = threading.Lock()
+            self.workbook = load_workbook_with_recovery(self.path)
+            self.sheet = self.workbook[self.sheet_name] if self.sheet_name else self.workbook.active
+            self.max_column = self.sheet.max_column
+            self._header_index_by_normalized: dict[str, int] = {}
+            self._header_index_by_exact: dict[str, int] = {}
+            self._refresh_headers()
+            self._ensure_tracking_columns()
+            self._refresh_headers()
+            self.source_header_names = self._build_source_header_names()
+        except Exception:
+            self.close()
+            raise
 
     def _refresh_headers(self) -> None:
         header_index_by_normalized: dict[str, int] = {}
@@ -182,6 +339,18 @@ class ExcelTracker:
     @property
     def available_headers(self) -> list[str]:
         return list(self.source_header_names)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            close_method = getattr(self.workbook, "close", None)
+            if callable(close_method):
+                close_method()
+        except Exception:
+            pass
+        release_excel_lock(self.lock_path)
 
     def build_pending_tasks(self) -> list[RowTask]:
         status_col_idx = self._header_index_by_normalized[normalize_key(self.status_column_name)]
@@ -885,53 +1054,56 @@ def build_profile_assignments(
 def run(config_path: Path) -> None:
     config = load_config(config_path)
     tracker = ExcelTracker(config["excel"])
-    validate_config(config, tracker)
-    profile_targets = resolve_profile_targets(config)
+    try:
+        validate_config(config, tracker)
+        profile_targets = resolve_profile_targets(config)
 
-    pending_tasks = tracker.build_pending_tasks()
-    if not pending_tasks:
-        log("No pending Excel rows found. Rows marked DONE are skipped automatically.")
-        return
+        pending_tasks = tracker.build_pending_tasks()
+        if not pending_tasks:
+            log("No pending Excel rows found. Rows marked DONE are skipped automatically.")
+            return
 
-    max_rows_per_profile = int(config.get("worker", {}).get("max_rows_per_profile", 0))
-    if max_rows_per_profile > 0:
-        run_row_cap = len(profile_targets) * max_rows_per_profile
-        selected_tasks = pending_tasks[:run_row_cap]
-        workers_needed = math.ceil(len(selected_tasks) / max_rows_per_profile) if selected_tasks else 0
-        selected_profile_targets = profile_targets[:workers_needed]
-    else:
-        selected_tasks = pending_tasks
-        selected_profile_targets = profile_targets
+        max_rows_per_profile = int(config.get("worker", {}).get("max_rows_per_profile", 0))
+        if max_rows_per_profile > 0:
+            run_row_cap = len(profile_targets) * max_rows_per_profile
+            selected_tasks = pending_tasks[:run_row_cap]
+            workers_needed = math.ceil(len(selected_tasks) / max_rows_per_profile) if selected_tasks else 0
+            selected_profile_targets = profile_targets[:workers_needed]
+        else:
+            selected_tasks = pending_tasks
+            selected_profile_targets = profile_targets
 
-    assignments = build_profile_assignments(selected_profile_targets, selected_tasks, max_rows_per_profile)
+        assignments = build_profile_assignments(selected_profile_targets, selected_tasks, max_rows_per_profile)
 
-    log(
-        f"Found {len(pending_tasks)} pending rows and {len(profile_targets)} AdsPower browser(s). "
-        f"This run will process up to {len(selected_tasks)} row(s)."
-    )
-
-    threads: list[threading.Thread] = []
-    for profile_target, assigned_tasks in assignments:
-        thread = threading.Thread(
-            target=worker_loop,
-            args=(profile_target, assigned_tasks, tracker, config),
-            daemon=False,
+        log(
+            f"Found {len(pending_tasks)} pending rows and {len(profile_targets)} AdsPower browser(s). "
+            f"This run will process up to {len(selected_tasks)} row(s)."
         )
-        threads.append(thread)
-        thread.start()
 
-    for thread in threads:
-        thread.join()
+        threads: list[threading.Thread] = []
+        for profile_target, assigned_tasks in assignments:
+            thread = threading.Thread(
+                target=worker_loop,
+                args=(profile_target, assigned_tasks, tracker, config),
+                daemon=False,
+            )
+            threads.append(thread)
+            thread.start()
 
-    refreshed_pending = tracker.build_pending_tasks()
-    total_remaining = len(refreshed_pending)
-    processed_in_batch = len(selected_tasks) - sum(
-        1 for task in selected_tasks if any(p.row_number == task.row_number for p in refreshed_pending)
-    )
-    log(
-        f"Batch finished. {processed_in_batch} row(s) were marked DONE in this run, "
-        f"and {total_remaining} pending row(s) remain for the next run."
-    )
+        for thread in threads:
+            thread.join()
+
+        refreshed_pending = tracker.build_pending_tasks()
+        total_remaining = len(refreshed_pending)
+        processed_in_batch = len(selected_tasks) - sum(
+            1 for task in selected_tasks if any(p.row_number == task.row_number for p in refreshed_pending)
+        )
+        log(
+            f"Batch finished. {processed_in_batch} row(s) were marked DONE in this run, "
+            f"and {total_remaining} pending row(s) remain for the next run."
+        )
+    finally:
+        tracker.close()
 
 
 def main() -> None:

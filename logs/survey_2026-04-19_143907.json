@@ -1,0 +1,22 @@
+[
+  {
+    "profile_id": "k1bnh023",
+    "state": "completed",
+    "questions_answered": 6,
+    "url": "https://19.stimulusassistforall.com/offers-flow.php?pageid=341",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Survey completed successfully",
+    "timestamp": "2026-04-19 14:37:41",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnh022",
+    "state": "stuck",
+    "questions_answered": 14,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=453c2686e5c54540aa59121c46961887&subaff1=872&subaff2=1532&zip=61054&lastName=Smith&gender=f&city=MOUNT%20MORRIS&address1=30%20Woodland%20St%205g&dobDay=04&firstName=Antoinette&phoneNumber=8605240566&state=IL&dobYear=1960&dobMonth=09&age=65&email=asmithreyes%40gmail.com",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 14:38:43",
+    "screenshot_path": ""
+  }
+]

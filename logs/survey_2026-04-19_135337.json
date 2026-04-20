@@ -1,0 +1,52 @@
+[
+  {
+    "profile_id": "k1bnfnuu",
+    "state": "completed",
+    "questions_answered": 4,
+    "url": "https://19.stimulusassistforall.com/offers-flow.php?pageid=341",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Survey completed successfully",
+    "timestamp": "2026-04-19 13:50:37",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnfnuy",
+    "state": "completed",
+    "questions_answered": 8,
+    "url": "https://19.stimulusassistforall.com/offers-flow.php?pageid=341",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Survey completed successfully",
+    "timestamp": "2026-04-19 13:50:53",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnfnuw",
+    "state": "completed",
+    "questions_answered": 11,
+    "url": "https://19.stimulusassistforall.com/offers-flow.php?pageid=341",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Survey completed successfully",
+    "timestamp": "2026-04-19 13:51:14",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnfnuv",
+    "state": "stuck",
+    "questions_answered": 24,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=98f2fbcf674a4cc69c18d3a61515d8f8&subaff1=872&subaff2=1532&zip=49091&lastName=Ball&gender=f&city=STURGIS&address1=107%20Cornelia%20St&dobDay=24&firstName=Chris&phoneNumber=2693706325&state=MI&dobMonth=02&dobYear=1987&email=ballchris08%40gmail.com&age=39",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 13:52:51",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnfnux",
+    "state": "stuck",
+    "questions_answered": 28,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=e700a0617e364f63ba90e90cb00a1d31&subaff1=872&subaff2=1532&zip=72450&lastName=Danaho&gender=f&city=PARAGOULD&address1=103%20Greene%20907%20Rd&dobDay=19&firstName=Susie&phoneNumber=8708829883&state=AR&dobMonth=09&dobYear=2003&email=susiedanaho%40gmail.com&age=22",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 13:53:37",
+    "screenshot_path": ""
+  }
+]

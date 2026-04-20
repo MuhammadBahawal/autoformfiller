@@ -142,6 +142,55 @@ DEFAULT_WEAK_COMPLETION_KEYWORDS = [
     "points have been",
 ]
 
+TERMINAL_CLAIM_BUTTON_KEYWORDS = (
+    "claim",
+    "redeem",
+    "collect",
+)
+
+TERMINAL_CLAIM_PAGE_HINTS = (
+    "claim your",
+    "deal below",
+    "paid offers",
+    "pending",
+    "prize",
+    "reward",
+    "earn save",
+)
+
+PROMOTIONAL_OPT_OUT_HINTS = (
+    "please answer the following questions",
+    "sign up",
+    "receive email",
+    "receive an email",
+    "exclusive offers",
+    "save $",
+    "save 2 00",
+    "powered by",
+    "discover nexxus",
+    "hellmann",
+    "unilever",
+    "axe",
+    "game day",
+    "prizes",
+)
+
+UNKNOWN_QUESTION_FALLBACK_PHRASES = (
+    "none of the above",
+    "none of these",
+    "none apply",
+    "none",
+    "not applicable",
+    "prefer not to answer",
+    "do not wish to answer",
+)
+
+UNKNOWN_QUESTION_NO_EXCLUSIONS = (
+    "no preference",
+    "no opinion",
+    "no difference",
+)
+
 
 # ===================================================================
 # Enums & data classes
@@ -522,16 +571,17 @@ class SurveyWorker:
                     switch_to(self._survey_tab_handle, "locked survey tab")
                 return
 
-            if original_handle and original_handle in handles:
+            resolved_index = self.tab_index
+            if resolved_index < 0:
+                resolved_index = len(handles) + resolved_index
+            if 0 <= resolved_index < len(handles):
+                indexed_handle = handles[resolved_index]
                 try:
-                    current_url = self.driver.current_url.lower()
-                    if self._is_content_url(current_url):
-                        if (
-                            (self.target_url_contains and self.target_url_contains in current_url)
-                            or self._page_has_interaction_signal()
-                        ):
-                            self._survey_tab_handle = original_handle
-                            return
+                    self.driver.switch_to.window(indexed_handle)
+                    indexed_url = self.driver.current_url.lower()
+                    if self._is_content_url(indexed_url):
+                        switch_to(indexed_handle, f"configured tab_index={self.tab_index}")
+                        return
                 except WebDriverException:
                     pass
 
@@ -547,33 +597,41 @@ class SurveyWorker:
                     except WebDriverException:
                         continue
 
-            # 2) Filter out DevTools and browser-internal tabs
-            content_handles = []
-            for handle in handles:
+            # 2) Score all content tabs and lock the one that looks most like the survey.
+            scored_handles: list[tuple[int, int, str, str]] = []
+            for idx, handle in enumerate(handles):
                 try:
                     self.driver.switch_to.window(handle)
                     url = self.driver.current_url.lower()
-                    if self._is_content_url(url):
-                        content_handles.append(handle)
+                    if not self._is_content_url(url):
+                        continue
+                    score = self._get_current_tab_match_score(url)
+                    if handle == original_handle:
+                        score += 2
+                    if idx == len(handles) - 1:
+                        score += 1
+                    scored_handles.append((score, idx, handle, url))
                 except WebDriverException:
-                    continue
+                    pass
+
+            content_handles = [handle for _, _, handle, _ in scored_handles]
 
             if not content_handles:
                 log("WARNING: All tabs are devtools/chrome pages - no content tab found!", self.profile_id)
                 self.driver.switch_to.window(handles[-1])
                 return
 
-            # 3) Prefer the most recently opened content tab with active survey elements
-            for handle in reversed(content_handles):
-                try:
-                    self.driver.switch_to.window(handle)
-                    if self._page_has_interaction_signal():
-                        switch_to(handle, "tab with survey elements")
-                        return
-                except WebDriverException:
-                    continue
+            scored_handles.sort(key=lambda item: (item[0], item[1]))
+            best_score, _, best_handle, _ = scored_handles[-1]
+            if best_score > 0:
+                switch_to(best_handle, f"best survey tab score={best_score}")
+                return
 
-            # 4) No interactive tab found - fall back to the last content tab
+            # 3) No strong survey score - fall back to original content tab, else last content tab.
+            if original_handle and original_handle in content_handles:
+                switch_to(original_handle, "original content tab fallback")
+                return
+
             switch_to(content_handles[-1], "content tab fallback")
 
         except WebDriverException as exc:
@@ -585,6 +643,59 @@ class SurveyWorker:
         if not normalized:
             return False
         return not any(normalized.startswith(prefix) for prefix in NON_CONTENT_URL_PREFIXES)
+
+    def _get_current_tab_match_score(self, current_url: str) -> int:
+        """Score the currently selected tab based on how likely it is to be the survey tab."""
+        score = 0
+        url = (current_url or "").strip().lower()
+        page_text = get_page_text(self.driver)
+        title = ""
+        try:
+            title = (self.driver.title or "").strip().lower()
+        except WebDriverException:
+            title = ""
+
+        if self.target_url_contains and self.target_url_contains in url:
+            score += 100
+
+        if self._page_has_interaction_signal():
+            score += 40
+
+        try:
+            claim_button, _ = self._detect_terminal_claim_screen()
+        except WebDriverException:
+            claim_button = None
+        if claim_button is not None:
+            score += 80
+
+        try:
+            if self._is_completed():
+                score += 60
+        except WebDriverException:
+            pass
+
+        try:
+            if self._is_disqualified():
+                score += 30
+        except WebDriverException:
+            pass
+
+        survey_hints = (
+            "survey",
+            "question",
+            "stimulus assistant",
+            "claim 1 deal below",
+            "paid offers",
+            "continue",
+            "next",
+            "submit",
+            "yes",
+            "no",
+        )
+        hint_hits = sum(1 for hint in survey_hints if hint in page_text or hint in title or hint in url)
+        score += min(hint_hits, 6) * 5
+
+        return score
 
     def _page_has_interaction_signal(self) -> bool:
         if self._find_continue_button() is not None:
@@ -653,6 +764,339 @@ class SurveyWorker:
         if not any(kw in page_text for kw in self.skip_keywords):
             return False
         return not self._page_has_interaction_signal()
+
+    def _get_clickable_text_candidates(self) -> list[WebElement]:
+        """Collect visible clickable elements that expose useful text for matching."""
+        try:
+            candidates = self.driver.execute_script(
+                """
+                const selectors = [
+                    "button",
+                    "a",
+                    "input[type='button']",
+                    "input[type='submit']",
+                    "input[type='radio']",
+                    "input[type='checkbox']",
+                    "[role='button']",
+                    "[role='radio']",
+                    "[role='checkbox']",
+                    "[role='option']",
+                    "label",
+                    "div",
+                    "span",
+                    "li"
+                ];
+
+                const isVisible = (el) => {
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return rect.width > 20
+                        && rect.height > 16
+                        && style.display !== "none"
+                        && style.visibility !== "hidden"
+                        && style.opacity !== "0";
+                };
+
+                const hasUsefulText = (el) => {
+                    const text = (
+                        el.innerText
+                        || el.textContent
+                        || el.value
+                        || el.getAttribute("aria-label")
+                        || el.getAttribute("title")
+                        || ""
+                    ).trim();
+                    return text.length > 0 && text.length <= 250;
+                };
+
+                const isClickable = (el) => {
+                    const tag = (el.tagName || "").toLowerCase();
+                    const role = (el.getAttribute("role") || "").toLowerCase();
+                    const style = window.getComputedStyle(el);
+                    const onclick = el.onclick !== null || el.hasAttribute("onclick");
+                    const hasBg = style.backgroundColor
+                        && style.backgroundColor !== "rgba(0, 0, 0, 0)"
+                        && style.backgroundColor !== "transparent";
+                    const hasBorder = style.borderWidth && style.borderWidth !== "0px";
+                    const semanticParent = el.closest(
+                        "button, a, label, [role='button'], [role='radio'], [role='checkbox'], [role='option']"
+                    );
+                    return tag === "button"
+                        || tag === "a"
+                        || tag === "input"
+                        || tag === "label"
+                        || role === "button"
+                        || role === "radio"
+                        || role === "checkbox"
+                        || role === "option"
+                        || style.cursor === "pointer"
+                        || onclick
+                        || hasBg
+                        || hasBorder
+                        || Boolean(semanticParent);
+                };
+
+                const seen = new Set();
+                const results = [];
+                for (const el of document.querySelectorAll(selectors.join(","))) {
+                    if (seen.has(el) || !isVisible(el) || !isClickable(el) || !hasUsefulText(el)) {
+                        continue;
+                    }
+                    seen.add(el);
+                    results.push(el);
+                    if (results.length >= 80) {
+                        break;
+                    }
+                }
+                return results;
+                """
+            )
+            if isinstance(candidates, list):
+                return candidates
+        except WebDriverException:
+            pass
+        return []
+
+    def _try_direct_answer_recovery(self) -> bool:
+        """
+        Recover from screens where normal question detection failed but clickable
+        answer buttons are visible.
+        """
+        candidates = self._get_clickable_text_candidates()
+        if not candidates:
+            return False
+
+        predefined_answer, is_strict = self._find_predefined_answer()
+        if predefined_answer:
+            choice = self._find_element_by_text(candidates, predefined_answer)
+            if choice:
+                log(f"Recovered screen via direct predefined click: {predefined_answer}", self.profile_id)
+                return safe_click(self.driver, choice)
+            if is_strict:
+                self._mark_required_predefined_missing(predefined_answer, candidates, "direct")
+                return False
+
+        choice = self._find_unknown_question_fallback_option(candidates)
+        if not choice:
+            return False
+
+        try:
+            label_text = (self._get_element_match_text(choice) or "(no text)")[:60]
+        except WebDriverException:
+            label_text = "(unknown)"
+        log(f"Recovered screen via direct fallback click: {label_text}", self.profile_id)
+        return safe_click(self.driver, choice)
+
+    def _find_promotional_opt_out_button(self) -> WebElement | None:
+        """
+        Detect promo-style yes/no offer pages and prefer the explicit "No" choice.
+        """
+        page_text = get_page_text(self.driver)
+        if not page_text:
+            return None
+
+        if not any(hint in page_text for hint in PROMOTIONAL_OPT_OUT_HINTS):
+            return None
+
+        candidates = self._get_clickable_text_candidates()
+        if len(candidates) < 2:
+            return None
+
+        yes_choice = self._find_element_by_text(candidates, "yes")
+        no_choice = self._find_element_by_text(candidates, "no")
+        if yes_choice is not None and no_choice is not None:
+            return no_choice
+        return None
+
+    def _find_terminal_claim_button(self) -> WebElement | None:
+        """Find the final reward/claim CTA shown after the survey is done."""
+        try:
+            direct_match = self.driver.execute_script(
+                """
+                const keywords = arguments[0];
+                const selectors = [
+                    "a",
+                    "button",
+                    "input[type='button']",
+                    "input[type='submit']",
+                    "[role='button']",
+                    "div",
+                    "span"
+                ];
+
+                const normalize = (value) => (value || "").toLowerCase().replace(/[^a-z0-9$ ]+/g, " ").replace(/\s+/g, " ").trim();
+                const isVisible = (el) => {
+                    if (!el) return false;
+                    const rect = el.getBoundingClientRect();
+                    const style = window.getComputedStyle(el);
+                    return rect.width > 20
+                        && rect.height > 16
+                        && style.display !== "none"
+                        && style.visibility !== "hidden"
+                        && style.opacity !== "0";
+                };
+
+                const getText = (el) => normalize(
+                    el.innerText
+                    || el.textContent
+                    || el.value
+                    || el.getAttribute("aria-label")
+                    || el.getAttribute("title")
+                    || ""
+                );
+
+                const clickableAncestor = (el) => {
+                    if (!el) return null;
+                    return el.closest("a, button, input[type='button'], input[type='submit'], [role='button'], label");
+                };
+
+                let best = null;
+                let bestScore = -1;
+                for (const el of document.querySelectorAll(selectors.join(","))) {
+                    if (!isVisible(el)) continue;
+
+                    const text = getText(el);
+                    if (!text) continue;
+                    if (!keywords.some((keyword) => text.includes(keyword))) continue;
+
+                    const target = clickableAncestor(el) || el;
+                    if (!isVisible(target)) continue;
+
+                    let score = 0;
+                    if (text.includes("claim")) score += 100;
+                    if (text.includes("claim $")) score += 40;
+                    if (text.includes("prize") || text.includes("reward")) score += 20;
+                    if (target.tagName === "A" || target.tagName === "BUTTON") score += 15;
+                    if ((target.getAttribute("role") || "").toLowerCase() === "button") score += 10;
+                    if (target === el) score += 5;
+
+                    const rect = target.getBoundingClientRect();
+                    if (rect.top >= 0 && rect.top < window.innerHeight * 0.75) score += 5;
+
+                    if (score > bestScore) {
+                        best = target;
+                        bestScore = score;
+                    }
+                }
+                return best;
+                """,
+                list(TERMINAL_CLAIM_BUTTON_KEYWORDS),
+            )
+            if direct_match is not None:
+                return direct_match
+        except WebDriverException:
+            pass
+
+        best_match: WebElement | None = None
+        best_score = -1
+
+        for element in self._get_clickable_text_candidates():
+            try:
+                button_text = self._get_element_match_text(element)
+            except WebDriverException:
+                continue
+
+            if not button_text:
+                continue
+
+            score = 0
+            normalized = normalize_text(button_text)
+            if "claim" in normalized.split():
+                score += 3
+            if any(keyword in normalized for keyword in TERMINAL_CLAIM_BUTTON_KEYWORDS):
+                score += 1
+            if "prize" in normalized or "reward" in normalized:
+                score += 1
+
+            if score > best_score:
+                best_match = element
+                best_score = score
+
+        if best_score > 0:
+            return best_match
+        return None
+
+    def _detect_terminal_claim_screen(self) -> tuple[WebElement | None, str]:
+        """
+        Detect the final reward screen that appears after survey completion.
+        Returns the claim button plus its visible text when matched.
+        """
+        page_text = get_page_text(self.driver)
+        if not page_text:
+            return None, ""
+
+        hint_count = sum(1 for hint in TERMINAL_CLAIM_PAGE_HINTS if hint in page_text)
+        if hint_count < 2 and not (
+            "claim your" in page_text and ("prize" in page_text or "reward" in page_text)
+        ):
+            return None, ""
+
+        button = self._find_terminal_claim_button()
+        if not button:
+            log("Terminal claim hints found but no claim button was resolved", self.profile_id)
+            return None, ""
+
+        try:
+            button_text = self._get_element_match_text(button)
+        except WebDriverException:
+            button_text = ""
+
+        normalized_button_text = normalize_text(button_text)
+        if not any(keyword in normalized_button_text for keyword in TERMINAL_CLAIM_BUTTON_KEYWORDS):
+            return None, ""
+
+        return button, normalized_button_text
+
+    def _handle_terminal_claim_screen(self, question_num: int) -> bool:
+        """
+        Click the final claim CTA once and stop without letting the worker get stuck.
+        """
+        button, button_text = self._detect_terminal_claim_screen()
+        if not button:
+            return False
+
+        old_handles: set[str] = set()
+        try:
+            old_handles = set(self.driver.window_handles)
+        except WebDriverException:
+            pass
+
+        clicked = safe_click(self.driver, button)
+        if clicked:
+            log(f"Clicked terminal claim button: {button_text or '(claim)'}", self.profile_id)
+            time.sleep(min(self.wait_after_click, 2.0))
+        else:
+            log(
+                f"Terminal claim screen detected but click failed: {button_text or '(claim)'}",
+                self.profile_id,
+            )
+
+        try:
+            current_handles = self.driver.window_handles
+            if (
+                self._survey_tab_handle
+                and self._survey_tab_handle in current_handles
+                and self.driver.current_window_handle != self._survey_tab_handle
+            ):
+                self.driver.switch_to.window(self._survey_tab_handle)
+                if len(current_handles) > len(old_handles):
+                    log("Returned focus to locked survey tab after claim click", self.profile_id)
+        except WebDriverException:
+            pass
+
+        self.result.questions_answered = max(question_num - 1, 0)
+        if clicked:
+            self._update_result(
+                SurveyState.COMPLETED,
+                "Final claim button clicked; stopped on completion screen",
+            )
+        else:
+            self._update_result(
+                SurveyState.COMPLETED,
+                "Final claim screen detected; claim click failed but survey was not marked stuck",
+            )
+        self._screenshot("completed")
+        return True
 
     def _find_continue_button(self) -> WebElement | None:
         """Find the Continue/Next/Submit button on the page."""
@@ -762,16 +1206,20 @@ class SurveyWorker:
     def _get_element_match_text(self, element: WebElement) -> str:
         """Extract the most useful visible text for matching an option."""
         try:
-            collected = [
-                element.text or "",
-                element.get_attribute("value") or "",
-                element.get_attribute("aria-label") or "",
-                element.get_attribute("title") or "",
-                element.get_attribute("placeholder") or "",
-            ]
-            base_text = normalize_text(" ".join(part for part in collected if part))
-            if base_text:
-                return base_text
+            direct_text = normalize_text(
+                " ".join(
+                    part
+                    for part in (
+                        element.text or "",
+                        element.get_attribute("aria-label") or "",
+                        element.get_attribute("title") or "",
+                        element.get_attribute("placeholder") or "",
+                    )
+                    if part
+                )
+            )
+            if direct_text:
+                return direct_text
         except WebDriverException:
             pass
 
@@ -793,6 +1241,16 @@ class SurveyWorker:
                 add(el.getAttribute('title') || '');
                 add(el.getAttribute('placeholder') || '');
 
+                const labelledBy = (el.getAttribute('aria-labelledby') || '').trim();
+                if (labelledBy) {
+                    for (const id of labelledBy.split(/\s+/)) {
+                        const labelledEl = document.getElementById(id);
+                        if (labelledEl) {
+                            add(labelledEl.innerText || labelledEl.textContent || '');
+                        }
+                    }
+                }
+
                 if (el.id) {
                     const labels = Array.from(document.getElementsByTagName('label'));
                     for (const label of labels) {
@@ -807,6 +1265,13 @@ class SurveyWorker:
                     add(wrapperLabel.innerText || wrapperLabel.textContent || '');
                 }
 
+                const semanticWrapper = el.closest(
+                    "button, [role='radio'], [role='checkbox'], [role='option'], .answer-option, .survey-option, .choice, .option-item, .response-option"
+                );
+                if (semanticWrapper && semanticWrapper !== el) {
+                    add(semanticWrapper.innerText || semanticWrapper.textContent || '');
+                }
+
                 if (el.previousElementSibling) {
                     add(el.previousElementSibling.innerText || el.previousElementSibling.textContent || '');
                 }
@@ -814,15 +1279,18 @@ class SurveyWorker:
                     add(el.nextElementSibling.innerText || el.nextElementSibling.textContent || '');
                 }
 
-                if (el.parentElement && el.parentElement.children.length <= 3) {
-                    add(el.parentElement.innerText || el.parentElement.textContent || '');
-                }
-
                 return pieces.join(' | ');
                 """,
                 element,
             )
-            return normalize_text(related_text)
+            normalized_related = normalize_text(related_text)
+            if normalized_related:
+                return normalized_related
+        except WebDriverException:
+            pass
+
+        try:
+            return normalize_text(element.get_attribute("value") or "")
         except WebDriverException:
             return ""
 
@@ -868,6 +1336,50 @@ class SurveyWorker:
             return partial_matches[0]
         return None
 
+    def _get_unknown_question_fallback_score(self, option_text: str) -> int:
+        """
+        Score opt-out style answers for questions that are not in data.txt.
+        Higher score means a stronger match for safe negative answers.
+        """
+        normalized = normalize_text(option_text)
+        if not normalized:
+            return -1
+
+        if "none of the above" in normalized or "none of these" in normalized:
+            return 4
+        if "none apply" in normalized:
+            return 3
+        if any(phrase in normalized for phrase in UNKNOWN_QUESTION_FALLBACK_PHRASES):
+            return 2
+        if any(phrase in normalized for phrase in UNKNOWN_QUESTION_NO_EXCLUSIONS):
+            return -1
+        if "no" in normalized.split():
+            return 1
+        return -1
+
+    def _find_unknown_question_fallback_option(self, elements: list[WebElement]) -> WebElement | None:
+        """
+        For unmapped questions, prefer explicit opt-out answers like
+        "No", "None", or "None of the above" before random selection.
+        """
+        best_match: WebElement | None = None
+        best_score = -1
+
+        for element in elements:
+            try:
+                option_text = self._get_element_match_text(element)
+            except WebDriverException:
+                continue
+
+            score = self._get_unknown_question_fallback_score(option_text)
+            if score > best_score:
+                best_match = element
+                best_score = score
+
+        if best_score >= 0:
+            return best_match
+        return None
+
     def _get_preferred_random_option(self, elements: list[WebElement]) -> WebElement | None:
         """
         Select a random option, preferring negative/skip options like:
@@ -908,7 +1420,7 @@ class SurveyWorker:
         return random.choice(other_options) if other_options else None
 
     def _answer_radio(self, radios: list[WebElement]) -> bool:
-        """Select a radio button: predefined if available, else smart random."""
+        """Select a radio button: predefined, fallback opt-out, else smart random."""
         if not radios:
             return False
         
@@ -922,6 +1434,16 @@ class SurveyWorker:
             if is_strict:
                 self._mark_required_predefined_missing(predefined_answer, radios, "radio")
                 return False
+
+        if not predefined_answer:
+            choice = self._find_unknown_question_fallback_option(radios)
+            if choice:
+                try:
+                    label_text = (self._get_element_match_text(choice) or "(no value)")[:50]
+                except WebDriverException:
+                    label_text = "(unknown)"
+                log(f"Selecting fallback radio for unmapped question: {label_text}", self.profile_id)
+                return safe_click(self.driver, choice)
         
         # Smart random selection
         choice = self._get_preferred_random_option(radios)
@@ -936,7 +1458,7 @@ class SurveyWorker:
         return safe_click(self.driver, choice)
 
     def _answer_checkbox(self, checkboxes: list[WebElement]) -> bool:
-        """Select 1 checkbox: predefined if available, else smart random."""
+        """Select 1 checkbox: predefined, fallback opt-out, else smart random."""
         if not checkboxes:
             return False
         
@@ -950,6 +1472,16 @@ class SurveyWorker:
             if is_strict:
                 self._mark_required_predefined_missing(predefined_answer, checkboxes, "checkbox")
                 return False
+
+        if not predefined_answer:
+            choice = self._find_unknown_question_fallback_option(checkboxes)
+            if choice:
+                try:
+                    label_text = (self._get_element_match_text(choice) or "(no value)")[:50]
+                except WebDriverException:
+                    label_text = "(unknown)"
+                log(f"Selecting fallback checkbox for unmapped question: {label_text}", self.profile_id)
+                return self._select_single_checkbox(checkboxes, choice)
         
         # Smart random selection (pick 1)
         choice = self._get_preferred_random_option(checkboxes)
@@ -961,10 +1493,54 @@ class SurveyWorker:
         except WebDriverException:
             label_text = "(unknown)"
         log(f"Selecting checkbox: {label_text}", self.profile_id)
-        return safe_click(self.driver, choice)
+        return self._select_single_checkbox(checkboxes, choice)
+
+    def _select_single_checkbox(
+        self,
+        checkboxes: list[WebElement],
+        choice: WebElement,
+    ) -> bool:
+        """Ensure exactly one checkbox remains selected."""
+        for checkbox in checkboxes:
+            if checkbox == choice:
+                continue
+            try:
+                if checkbox.is_selected():
+                    self.driver.execute_script(
+                        """
+                        arguments[0].checked = false;
+                        arguments[0].dispatchEvent(new Event('input', { bubbles: true }));
+                        arguments[0].dispatchEvent(new Event('change', { bubbles: true }));
+                        """,
+                        checkbox,
+                    )
+            except WebDriverException:
+                continue
+
+        try:
+            if choice.is_selected():
+                return True
+        except WebDriverException:
+            pass
+
+        if safe_click(self.driver, choice):
+            return True
+
+        try:
+            self.driver.execute_script(
+                """
+                arguments[0].checked = true;
+                arguments[0].dispatchEvent(new Event('input', { bubbles: true }));
+                arguments[0].dispatchEvent(new Event('change', { bubbles: true }));
+                """,
+                choice,
+            )
+            return True
+        except WebDriverException:
+            return False
 
     def _answer_dropdown(self, selects: list[WebElement]) -> bool:
-        """Select dropdown option: predefined if available, else smart random."""
+        """Select dropdown option: predefined, fallback opt-out, else smart random."""
         if not selects:
             return False
         select_el = selects[0]
@@ -993,6 +1569,13 @@ class SurveyWorker:
                     if is_strict:
                         self._mark_required_predefined_missing(predefined_answer, valid_options, "dropdown")
                         return False
+
+                if not predefined_answer:
+                    choice = self._find_unknown_question_fallback_option(valid_options)
+                    if choice:
+                        log(f"Selecting fallback dropdown for unmapped question: {choice.text[:50]}", self.profile_id)
+                        sel.select_by_value(choice.get_attribute("value"))
+                        return True
                 
                 # Smart random selection
                 choice = self._get_preferred_random_option(valid_options)
@@ -1007,7 +1590,7 @@ class SurveyWorker:
         return False
 
     def _answer_button_options(self, buttons: list[WebElement]) -> bool:
-        """Click button option: predefined if available, else smart random."""
+        """Click button option: predefined, fallback opt-out, else smart random."""
         if not buttons:
             return False
         
@@ -1021,6 +1604,16 @@ class SurveyWorker:
             if is_strict:
                 self._mark_required_predefined_missing(predefined_answer, buttons, "button")
                 return False
+
+        if not predefined_answer:
+            choice = self._find_unknown_question_fallback_option(buttons)
+            if choice:
+                try:
+                    label_text = (self._get_element_match_text(choice) or "(no text)")[:50]
+                except WebDriverException:
+                    label_text = "(unknown)"
+                log(f"Clicking fallback answer for unmapped question: {label_text}", self.profile_id)
+                return safe_click(self.driver, choice)
         
         # Smart random selection
         choice = self._get_preferred_random_option(buttons)
@@ -1090,6 +1683,33 @@ class SurveyWorker:
 
             # ---- Check for completion / disqualification ----
             try:
+                if self._handle_terminal_claim_screen(question_num):
+                    log("Final claim screen reached; worker stopped cleanly", self.profile_id)
+                    return self.result
+
+                promo_no_choice = self._find_promotional_opt_out_button()
+                if promo_no_choice is not None:
+                    old_url, old_source_hash = self._get_page_snapshot()
+                    if safe_click(self.driver, promo_no_choice):
+                        log("Clicked promotional opt-out answer: no", self.profile_id)
+                        time.sleep(0.5)
+                        try:
+                            new_url = self.driver.current_url
+                            new_hash = hash(self.driver.page_source)
+                            page_changed = (new_url != old_url) or (new_hash != old_source_hash)
+                        except WebDriverException:
+                            page_changed = False
+
+                        if not page_changed:
+                            if self._click_continue():
+                                self._wait_for_page_change(old_url, old_source_hash)
+                            else:
+                                time.sleep(self.wait_after_click)
+                        else:
+                            time.sleep(1)
+                        self.result.questions_answered = max(self.result.questions_answered, question_num)
+                        continue
+
                 if self._is_completed():
                     self.result.questions_answered = question_num - 1
                     self._update_result(SurveyState.COMPLETED, "Survey completed successfully")
@@ -1119,6 +1739,26 @@ class SurveyWorker:
                 q_type, elements = QuestionType.NONE, []
 
             if q_type == QuestionType.NONE:
+                old_url, old_source_hash = self._get_page_snapshot()
+                if self._try_direct_answer_recovery():
+                    time.sleep(0.5)
+                    try:
+                        new_url = self.driver.current_url
+                        new_hash = hash(self.driver.page_source)
+                        page_changed = (new_url != old_url) or (new_hash != old_source_hash)
+                    except WebDriverException:
+                        page_changed = False
+
+                    if not page_changed:
+                        if self._click_continue():
+                            self._wait_for_page_change(old_url, old_source_hash)
+                        else:
+                            time.sleep(self.wait_after_click)
+                    else:
+                        time.sleep(1)
+                    stuck_count = 0
+                    continue
+
                 # No question elements found — might be loading or stuck
                 stuck_count += 1
                 log(
@@ -1209,6 +1849,8 @@ class SurveyWorker:
 
         # ---- Max questions reached ----
         # Final completion check
+        if self._handle_terminal_claim_screen(self.max_questions + 1):
+            return self.result
         if self._is_completed():
             self._update_result(SurveyState.COMPLETED, f"Survey completed after {self.max_questions} questions")
             self._screenshot("completed")
@@ -1239,10 +1881,51 @@ class SurveyAgent:
         self.client = AdsPowerClient(self.adspower_config)
         self.results: list[SurveyResult] = []
         self._results_lock = threading.Lock()
+        self._profile_connect_lock = threading.Lock()
+        self.attach_retries: int = max(1, int(self.survey_config.get("attach_retries", 3)))
+        self.attach_retry_delay: float = max(
+            0.5,
+            float(self.survey_config.get("attach_retry_delay_seconds", 2)),
+        )
+        self.profile_discovery_retries: int = max(
+            1,
+            int(self.survey_config.get("profile_discovery_retries", 4)),
+        )
+        self.profile_discovery_wait: float = max(
+            0.5,
+            float(self.survey_config.get("profile_discovery_wait_seconds", 1.5)),
+        )
+        self.thread_start_stagger: float = max(
+            0.0,
+            float(self.survey_config.get("thread_start_stagger_seconds", 0.25)),
+        )
         
         # Load predefined answers
         data_file = self.survey_config.get("data_file", "data.txt")
         self.predefined_answers = load_predefined_answers(data_file)
+
+    def _append_result(self, result: SurveyResult) -> None:
+        with self._results_lock:
+            self.results.append(result)
+
+    def _collect_active_profiles(self) -> list[dict[str, Any]]:
+        discovered: dict[str, dict[str, Any]] = {}
+
+        for attempt in range(1, self.profile_discovery_retries + 1):
+            active = self.client.list_active_profiles()
+            for profile_data in active:
+                pid = str(profile_data.get("user_id", "")).strip()
+                if pid:
+                    discovered[pid] = profile_data
+
+            log(
+                f"Active profile discovery {attempt}/{self.profile_discovery_retries}: {len(discovered)} unique profile(s)",
+            )
+
+            if attempt < self.profile_discovery_retries:
+                time.sleep(self.profile_discovery_wait)
+
+        return list(discovered.values())
 
     def _resolve_profiles(self) -> list[dict[str, Any]]:
         explicit_ids = [
@@ -1252,37 +1935,113 @@ class SurveyAgent:
         ]
 
         if explicit_ids:
-            profiles = []
-            for pid in explicit_ids:
-                try:
-                    driver, _ = self.client.start_profile(pid)
-                    profiles.append({"user_id": pid, "driver": driver, "connect_mode": "start"})
-                except Exception as exc:
-                    log(f"Could not start profile {pid}: {exc}")
-            return profiles
+            return [
+                {"user_id": pid, "connect_mode": "start"}
+                for pid in explicit_ids
+            ]
 
         if bool(self.adspower_config.get("use_active_profiles", True)):
-            active = self.client.list_active_profiles()
+            active = self._collect_active_profiles()
             if not active:
                 raise RuntimeError(
                     "No open ADSPower browsers found. "
                     "Open the desired browser profiles first, then run again."
                 )
             profiles = []
+            seen_profile_ids: set[str] = set()
             for profile_data in active:
-                pid = str(profile_data["user_id"])
-                try:
-                    driver = self.client.attach_to_active_profile(profile_data)
-                    profiles.append({"user_id": pid, "driver": driver, "connect_mode": "attach"})
-                except Exception as exc:
-                    log(f"Could not attach to profile {pid}: {exc}")
+                pid = str(profile_data.get("user_id", "")).strip()
+                if not pid or pid in seen_profile_ids:
+                    continue
+                seen_profile_ids.add(pid)
+                profiles.append(
+                    {
+                        "user_id": pid,
+                        "connect_mode": "attach",
+                        "browser_data": profile_data,
+                    }
+                )
             return profiles
 
         raise RuntimeError("No ADSPower profiles configured.")
 
+    def _get_active_profile_data(self, profile_id: str) -> dict[str, Any] | None:
+        try:
+            active = self.client.list_active_profiles()
+        except Exception as exc:
+            log(f"Could not refresh active profile list: {exc}", profile_id)
+            return None
+
+        for profile_data in active:
+            if str(profile_data.get("user_id", "")).strip() == profile_id:
+                return profile_data
+        return None
+
+    def _connect_profile_driver(self, profile: dict[str, Any]) -> webdriver.Chrome:
+        profile_id = str(profile["user_id"])
+        connect_mode = str(profile.get("connect_mode", "attach")).strip().lower()
+        browser_data = profile.get("browser_data")
+        last_error: Exception | None = None
+
+        for attempt in range(1, self.attach_retries + 1):
+            try:
+                if connect_mode == "start":
+                    with self._profile_connect_lock:
+                        driver, _ = self.client.start_profile(profile_id)
+                    log(
+                        f"Connected to profile on attempt {attempt}/{self.attach_retries}",
+                        profile_id,
+                    )
+                    return driver
+
+                current_browser_data = browser_data
+                if attempt > 1 or not current_browser_data:
+                    current_browser_data = self._get_active_profile_data(profile_id)
+                    if current_browser_data:
+                        profile["browser_data"] = current_browser_data
+                        browser_data = current_browser_data
+
+                if not current_browser_data:
+                    raise RuntimeError("Profile is not present in AdsPower local-active list")
+
+                with self._profile_connect_lock:
+                    driver = self.client.attach_to_active_profile(current_browser_data)
+                log(
+                    f"Attached to active profile on attempt {attempt}/{self.attach_retries}",
+                    profile_id,
+                )
+                return driver
+            except Exception as exc:
+                last_error = exc
+                action = "start" if connect_mode == "start" else "attach"
+                log(
+                    f"Could not {action} profile on attempt {attempt}/{self.attach_retries}: {exc}",
+                    profile_id,
+                )
+                if attempt < self.attach_retries:
+                    time.sleep(self.attach_retry_delay)
+
+        raise RuntimeError(
+            f"Could not connect to profile after {self.attach_retries} attempts: {last_error}"
+        )
+
     def _worker_thread(self, profile: dict[str, Any]) -> None:
-        profile_id = profile["user_id"]
-        driver = profile["driver"]
+        profile_id = str(profile["user_id"])
+        log("Worker assigned to profile", profile_id)
+
+        try:
+            driver = self._connect_profile_driver(profile)
+        except Exception as exc:
+            log(f"Worker could not connect to profile: {exc}", profile_id)
+            error_result = SurveyResult(
+                profile_id=profile_id,
+                state=SurveyState.FAILED.value,
+                message=f"Could not connect to profile: {exc}",
+            )
+            error_result.refresh_timestamp()
+            self._append_result(error_result)
+            return
+
         try:
             worker = SurveyWorker(
                 driver=driver,
@@ -1291,8 +2050,7 @@ class SurveyAgent:
                 predefined_answers=self.predefined_answers,
             )
             result = worker.run()
-            with self._results_lock:
-                self.results.append(result)
+            self._append_result(result)
         except Exception as exc:
             log(f"Survey thread crashed: {exc}", profile_id)
             error_result = SurveyResult(
@@ -1301,8 +2059,7 @@ class SurveyAgent:
                 message=f"Thread crashed: {exc}",
             )
             error_result.refresh_timestamp()
-            with self._results_lock:
-                self.results.append(error_result)
+            self._append_result(error_result)
 
     def run(self) -> list[SurveyResult]:
         """Run the survey agent across all browsers."""
@@ -1316,6 +2073,9 @@ class SurveyAgent:
             return []
 
         log(f"Found {len(profiles)} browser profile(s) for survey filling.")
+        profile_ids = ", ".join(str(profile["user_id"]) for profile in profiles)
+        if profile_ids:
+            log(f"Target profile IDs: {profile_ids}")
 
         threads: list[threading.Thread] = []
         for profile in profiles:
@@ -1326,6 +2086,8 @@ class SurveyAgent:
             )
             threads.append(t)
             t.start()
+            if self.thread_start_stagger:
+                time.sleep(self.thread_start_stagger)
 
         for t in threads:
             t.join()

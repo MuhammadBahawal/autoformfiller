@@ -1,0 +1,42 @@
+[
+  {
+    "profile_id": "k1bnk2t2",
+    "state": "stuck",
+    "questions_answered": 13,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 16:28:12",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnk2t3",
+    "state": "failed",
+    "questions_answered": 100,
+    "url": "https://www.facebook.com/61574361671073/",
+    "title": "Profile for Working 10",
+    "message": "Reached max_questions limit (100) without completion",
+    "timestamp": "2026-04-19 16:37:20",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnk2t5",
+    "state": "failed",
+    "questions_answered": 100,
+    "url": "https://www.facebook.com/61574361671073/",
+    "title": "Profile for Working 10",
+    "message": "Reached max_questions limit (100) without completion",
+    "timestamp": "2026-04-19 16:37:33",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnk2t6",
+    "state": "failed",
+    "questions_answered": 100,
+    "url": "https://www.facebook.com/61574361671073/",
+    "title": "Profile for Working 10",
+    "message": "Reached max_questions limit (100) without completion",
+    "timestamp": "2026-04-19 16:38:11",
+    "screenshot_path": ""
+  }
+]

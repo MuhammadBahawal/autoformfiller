@@ -1,0 +1,32 @@
+[
+  {
+    "profile_id": "k1bni5t5",
+    "state": "stuck",
+    "questions_answered": 14,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 15:31:21",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bni5t7",
+    "state": "stuck",
+    "questions_answered": 23,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 15:32:12",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bni5t4",
+    "state": "stuck",
+    "questions_answered": 23,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 15:32:17",
+    "screenshot_path": ""
+  }
+]

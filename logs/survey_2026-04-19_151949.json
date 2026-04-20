@@ -1,0 +1,22 @@
+[
+  {
+    "profile_id": "k1bni5tb",
+    "state": "stuck",
+    "questions_answered": 24,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=d33d6be1d11943edbe8157c9b27d7c93&subaff1=872&subaff2=1532&zip=48210&lastName=Smith&gender=m&city=DETROIT&address1=7756%20Holmes&dobDay=03&firstName=Martina&phoneNumber=3132850616&state=MI&dobMonth=03&dobYear=1986&email=ms21_07%40yahoo.com&age=40",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 15:19:46",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bni5te",
+    "state": "stuck",
+    "questions_answered": 24,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=5c408e201e254f92b8ec5adec94fcd95&subaff1=872&subaff2=1532&zip=29649&lastName=Goldman&gender=m&city=GREENWOOD&address1=122%20Clifton%20St&dobDay=11&firstName=Kathy&phoneNumber=8643896859&state=SC&dobMonth=04&dobYear=2000&email=sunshine29384%40yahoo.com&age=26",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 15:19:49",
+    "screenshot_path": ""
+  }
+]

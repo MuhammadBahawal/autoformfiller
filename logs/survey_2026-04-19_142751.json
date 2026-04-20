@@ -1,0 +1,22 @@
+[
+  {
+    "profile_id": "k1bnfnuo",
+    "state": "stuck",
+    "questions_answered": 31,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 14:27:16",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnfnun",
+    "state": "stuck",
+    "questions_answered": 24,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=aae55148c11f41deb0a594fc8a4e8da8&subaff1=872&subaff2=1532&zip=94134&lastName=Hee&gender=f&city=SAN%20FRANCISCO&address1=582%20Campbell%20Ave&dobDay=02&firstName=Betty&phoneNumber=4159473788&state=CA&dobMonth=04&dobYear=1982&age=44&email=rcmgmt%40optonline.net",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 14:27:51",
+    "screenshot_path": ""
+  }
+]

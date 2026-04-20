@@ -1,0 +1,42 @@
+[
+  {
+    "profile_id": "k1bnfnut",
+    "state": "stuck",
+    "questions_answered": 12,
+    "url": "https://19.stimulusassistforall.com/offers-flow.php?pageid=332",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 14:13:12",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnfnus",
+    "state": "stuck",
+    "questions_answered": 17,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=b15c656c72204f4d8a0bfa0737309280&subaff1=872&subaff2=1532&zip=72450&lastName=Danaho&gender=f&city=PARAGOULD&address1=103%20Greene%20907%20Rd&dobDay=19&firstName=Susie&phoneNumber=8708829883&state=AR&dobMonth=09&dobYear=2003&age=22&email=susiedanaho%40gmail.com",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 14:13:50",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnfnur",
+    "state": "stuck",
+    "questions_answered": 22,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=b7677cbe361b4b82aa1b8aa4b971742c&subaff1=872&subaff2=1532&zip=41076&lastName=Gray&gender=f&city=NEWPORT&address1=1026%20Blossom%20Dr&dobDay=15&firstName=Gina&phoneNumber=8598017344&state=KY&dobYear=2004&dobMonth=07&email=gina.gray%40fmr.com&age=21",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 14:14:31",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnfnup",
+    "state": "stuck",
+    "questions_answered": 50,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 14:17:12",
+    "screenshot_path": ""
+  }
+]

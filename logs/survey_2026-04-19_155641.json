@@ -1,0 +1,52 @@
+[
+  {
+    "profile_id": "k1bnisum",
+    "state": "completed",
+    "questions_answered": 3,
+    "url": "https://19.stimulusassistforall.com/offers-flow.php?pageid=341",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Survey completed successfully",
+    "timestamp": "2026-04-19 15:54:14",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnisur",
+    "state": "completed",
+    "questions_answered": 8,
+    "url": "https://19.stimulusassistforall.com/offers-flow.php?pageid=341",
+    "title": "Stimulus Assistance - Offers",
+    "message": "Survey completed successfully",
+    "timestamp": "2026-04-19 15:54:36",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnisup",
+    "state": "stuck",
+    "questions_answered": 20,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=2ca277f2cb9a4ae3a56b27310658e675&subaff1=872&subaff2=1532_Dupe&zip=94121&lastName=Pettus&gender=m&city=SAN%20FRANCISCO&address1=865%2037th%20Ave&dobDay=26&firstName=Geri&phoneNumber=4157501957&state=CA&dobMonth=07&dobYear=1951&email=nopner%40yahoo.com&age=74",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 15:56:28",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnisuq",
+    "state": "stuck",
+    "questions_answered": 25,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=2e2893ab4f2f4bd6a541297a0154c4c7&subaff1=872&subaff2=1532&zip=48227&lastName=Harris&gender=f&city=DETROIT&address1=12044%20Terry&dobDay=21&firstName=Arielle&phoneNumber=3132054384&state=MI&dobYear=1989&dobMonth=09&email=ariel9876%40gmail.com&age=36",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 15:56:39",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bnisun",
+    "state": "stuck",
+    "questions_answered": 25,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=25054fefa03a4fd88652903885f94863&subaff1=872&subaff2=1532&zip=24224&lastName=Mccoy&gender=f&city=CASTLEWOOD&address1=386%20Miracle%20Ln&dobDay=07&firstName=Naomah&phoneNumber=2767949580&state=VA&dobMonth=12&dobYear=1980&age=45&email=lavenderski%40gmail.com",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-19 15:56:41",
+    "screenshot_path": ""
+  }
+]
