@@ -1,0 +1,22 @@
+[
+  {
+    "profile_id": "k1bp5v5l",
+    "state": "stuck",
+    "questions_answered": 16,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-21 00:13:33",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bp5v5m",
+    "state": "stuck",
+    "questions_answered": 17,
+    "url": "(unreachable)",
+    "title": "(unreachable)",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-21 00:13:54",
+    "screenshot_path": ""
+  }
+]

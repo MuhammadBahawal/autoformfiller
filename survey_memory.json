@@ -1,0 +1,248 @@
+{
+  "learned_answers": {
+    "stimulus assistance for individuals families seniors students veterans loading in 5 secs": {
+      "families individuals seniors": {
+        "answer_text": "families individuals seniors",
+        "success": 0,
+        "failure": 1,
+        "last_result": "failure",
+        "last_source": "random",
+        "last_seen_at": "2026-04-21 01:08:06",
+        "last_reason": "Stuck after 10 retries — no question elements found"
+      }
+    },
+    "this site is not affiliated with any government agency please answer the following questions are you interested in any of the following laser hair removal dental implants weight loss hair transplant lasik eye surgery botox none of the above continue terms conditions privacy policy privacy notice contact us unsubscribe ca consumers do not sell my information": {
+      "none of the above 0 none of the above none of the above": {
+        "answer_text": "none of the above 0 none of the above none of the above",
+        "success": 0,
+        "failure": 3,
+        "last_result": "failure",
+        "last_source": "fallback",
+        "last_seen_at": "2026-04-21 01:20:23",
+        "last_reason": "Stuck after 10 retries — no question elements found"
+      }
+    }
+  },
+  "page_memory": {
+    "61c33d3d3093f4acddf0": {
+      "question_text": "all trademarks appearing in connection with rewards or offers are the property of their respective owners their appearance does not imply any endorsement affiliation or sponsorship with this website rewards cash and promotional offers are provided solely by third party advertisers we do not create control or fulfill these offers participation in any third party offer is at your own discretion and any questions or issues regarding fulfillment should be directed to the originating website by engaging with these offers you acknowledge that your information may be shared with advertisers for verif",
+      "option_texts": [],
+      "success_answers": {},
+      "failed_answers": {},
+      "last_result": "issue",
+      "last_seen_at": "2026-04-21 01:20:23",
+      "last_reason": "Stuck after 10 retries with no question elements"
+    },
+    "8fc29df861ec104ffcaf": {
+      "question_text": "stimulus assistance for individuals families seniors students veterans loading in 5 secs",
+      "option_texts": [
+        "individuals families",
+        "families individuals seniors",
+        "seniors families students",
+        "students",
+        "veterans"
+      ],
+      "success_answers": {},
+      "failed_answers": {
+        "families individuals seniors": 1
+      },
+      "last_result": "failure",
+      "last_seen_at": "2026-04-21 01:08:06",
+      "last_reason": "Stuck after 10 retries — no question elements found"
+    },
+    "0c9e8069aca9b8974ffb": {
+      "question_text": "this site is not affiliated with any government agency please answer the following questions are you interested in any of the following laser hair removal dental implants weight loss hair transplant lasik eye surgery botox none of the above continue terms conditions privacy policy privacy notice contact us unsubscribe ca consumers do not sell my information",
+      "option_texts": [
+        "laser hair removal 1 laser hair removal laser hair removal",
+        "dental implants 1 dental implants dental implants",
+        "weight loss 1 weight loss weight loss",
+        "hair transplant 1 hair transplant hair transplant",
+        "lasik eye surgery 1 lasik eye surgery lasik eye surgery",
+        "botox 1 botox botox",
+        "none of the above 0 none of the above none of the above"
+      ],
+      "success_answers": {},
+      "failed_answers": {
+        "none of the above 0 none of the above none of the above": 3
+      },
+      "last_result": "failure",
+      "last_seen_at": "2026-04-21 01:20:23",
+      "last_reason": "Stuck after 10 retries — no question elements found"
+    },
+    "da39a3ee5e6b4b0d3255": {
+      "question_text": "",
+      "option_texts": [],
+      "success_answers": {},
+      "failed_answers": {},
+      "last_result": "issue",
+      "last_seen_at": "2026-04-21 01:21:04",
+      "last_reason": "Stuck after 10 retries with no question elements"
+    }
+  },
+  "recent_failures": [
+    {
+      "timestamp": "2026-04-21 01:20:23",
+      "question_text": "this site is not affiliated with any government agency please answer the following questions are you interested in any of the following laser hair removal dental implants weight loss hair transplant lasik eye surgery botox none of the above continue terms conditions privacy policy privacy notice contact us unsubscribe ca consumers do not sell my information",
+      "answer_text": "none of the above 0 none of the above none of the above",
+      "option_texts": [
+        "laser hair removal 1 laser hair removal laser hair removal",
+        "dental implants 1 dental implants dental implants",
+        "weight loss 1 weight loss weight loss",
+        "hair transplant 1 hair transplant hair transplant",
+        "lasik eye surgery 1 lasik eye surgery lasik eye surgery",
+        "botox 1 botox botox",
+        "none of the above 0 none of the above none of the above"
+      ],
+      "reason": "Stuck after 10 retries — no question elements found",
+      "source": "fallback",
+      "page_signature": "0c9e8069aca9b8974ffb"
+    },
+    {
+      "timestamp": "2026-04-21 01:09:16",
+      "question_text": "this site is not affiliated with any government agency please answer the following questions are you interested in any of the following laser hair removal dental implants weight loss hair transplant lasik eye surgery botox none of the above continue terms conditions privacy policy privacy notice contact us unsubscribe ca consumers do not sell my information",
+      "answer_text": "none of the above 0 none of the above none of the above",
+      "option_texts": [
+        "laser hair removal 1 laser hair removal laser hair removal",
+        "dental implants 1 dental implants dental implants",
+        "weight loss 1 weight loss weight loss",
+        "hair transplant 1 hair transplant hair transplant",
+        "lasik eye surgery 1 lasik eye surgery lasik eye surgery",
+        "botox 1 botox botox",
+        "none of the above 0 none of the above none of the above"
+      ],
+      "reason": "Stuck after 10 retries — no question elements found",
+      "source": "fallback",
+      "page_signature": "0c9e8069aca9b8974ffb"
+    },
+    {
+      "timestamp": "2026-04-21 01:08:07",
+      "question_text": "this site is not affiliated with any government agency please answer the following questions are you interested in any of the following laser hair removal dental implants weight loss hair transplant lasik eye surgery botox none of the above continue terms conditions privacy policy privacy notice contact us unsubscribe ca consumers do not sell my information",
+      "answer_text": "none of the above 0 none of the above none of the above",
+      "option_texts": [
+        "laser hair removal 1 laser hair removal laser hair removal",
+        "dental implants 1 dental implants dental implants",
+        "weight loss 1 weight loss weight loss",
+        "hair transplant 1 hair transplant hair transplant",
+        "lasik eye surgery 1 lasik eye surgery lasik eye surgery",
+        "botox 1 botox botox",
+        "none of the above 0 none of the above none of the above"
+      ],
+      "reason": "Stuck after 10 retries — no question elements found",
+      "source": "fallback",
+      "page_signature": "0c9e8069aca9b8974ffb"
+    },
+    {
+      "timestamp": "2026-04-21 01:08:06",
+      "question_text": "stimulus assistance for individuals families seniors students veterans loading in 5 secs",
+      "answer_text": "families individuals seniors",
+      "option_texts": [
+        "individuals families",
+        "families individuals seniors",
+        "seniors families students",
+        "students",
+        "veterans"
+      ],
+      "reason": "Stuck after 10 retries — no question elements found",
+      "source": "random",
+      "page_signature": "8fc29df861ec104ffcaf"
+    }
+  ],
+  "profile_memory": {
+    "k1bp731u": {
+      "completed_count": 0,
+      "disqualified_count": 0,
+      "stuck_count": 1,
+      "failed_count": 0,
+      "connect_failure_count": 0,
+      "thread_crash_count": 0,
+      "no_result_count": 0,
+      "last_outcome": "stuck",
+      "last_message": "Stuck after 10 retries — no question elements found",
+      "last_seen_at": "2026-04-21 01:08:06"
+    },
+    "k1bp731q": {
+      "completed_count": 0,
+      "disqualified_count": 0,
+      "stuck_count": 1,
+      "failed_count": 0,
+      "connect_failure_count": 0,
+      "thread_crash_count": 0,
+      "no_result_count": 0,
+      "last_outcome": "stuck",
+      "last_message": "Stuck after 10 retries — no question elements found",
+      "last_seen_at": "2026-04-21 01:08:07"
+    },
+    "k1bp731s": {
+      "completed_count": 0,
+      "disqualified_count": 0,
+      "stuck_count": 0,
+      "failed_count": 0,
+      "connect_failure_count": 0,
+      "thread_crash_count": 1,
+      "no_result_count": 0,
+      "last_outcome": "thread_crashed",
+      "last_message": "HTTPConnectionPool(host='localhost', port=53857): Read timed out. (read timeout=120)",
+      "last_seen_at": "2026-04-21 01:08:28"
+    },
+    "k1bp731t": {
+      "completed_count": 0,
+      "disqualified_count": 0,
+      "stuck_count": 0,
+      "failed_count": 0,
+      "connect_failure_count": 0,
+      "thread_crash_count": 1,
+      "no_result_count": 0,
+      "last_outcome": "thread_crashed",
+      "last_message": "HTTPConnectionPool(host='localhost', port=53856): Read timed out. (read timeout=120)",
+      "last_seen_at": "2026-04-21 01:08:48"
+    },
+    "k1bp731p": {
+      "completed_count": 0,
+      "disqualified_count": 0,
+      "stuck_count": 1,
+      "failed_count": 0,
+      "connect_failure_count": 0,
+      "thread_crash_count": 0,
+      "no_result_count": 0,
+      "last_outcome": "stuck",
+      "last_message": "Stuck after 10 retries — no question elements found",
+      "last_seen_at": "2026-04-21 01:09:17"
+    },
+    "k1bp731n": {
+      "completed_count": 0,
+      "disqualified_count": 0,
+      "stuck_count": 1,
+      "failed_count": 0,
+      "connect_failure_count": 0,
+      "thread_crash_count": 0,
+      "no_result_count": 0,
+      "last_outcome": "stuck",
+      "last_message": "Stuck after 10 retries — no question elements found",
+      "last_seen_at": "2026-04-21 01:20:23"
+    },
+    "k1bp731l": {
+      "completed_count": 0,
+      "disqualified_count": 0,
+      "stuck_count": 0,
+      "failed_count": 0,
+      "connect_failure_count": 0,
+      "thread_crash_count": 1,
+      "no_result_count": 0,
+      "last_outcome": "thread_crashed",
+      "last_message": "('Connection aborted.', ConnectionResetError(10054, 'An existing connection was forcibly closed by the remote host', None, 10054, None))",
+      "last_seen_at": "2026-04-21 01:20:24"
+    },
+    "k1bp731m": {
+      "completed_count": 0,
+      "disqualified_count": 0,
+      "stuck_count": 1,
+      "failed_count": 0,
+      "connect_failure_count": 0,
+      "thread_crash_count": 0,
+      "no_result_count": 0,
+      "last_outcome": "stuck",
+      "last_message": "Stuck after 10 retries — no question elements found",
+      "last_seen_at": "2026-04-21 01:21:04"
+    }
+  }
+}

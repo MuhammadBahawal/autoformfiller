@@ -1,0 +1,32 @@
+[
+  {
+    "profile_id": "k1bp731u",
+    "state": "stuck",
+    "questions_answered": 11,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=cc1c540ec55c45aba6400b3c2690d393&subaff1=872&subaff2=1532_Dupe&zip=54901&lastName=Hoddel&gender=m&city=OSHKOSH&address1=1011%20W%20New%20York%20Ave%208&dobDay=29&firstName=Travis&phoneNumber=9209358529&state=WI&dobYear=1977&dobMonth=01&email=devilishclown%40yahoo.com&age=49",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-21 01:08:06",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bp731q",
+    "state": "stuck",
+    "questions_answered": 15,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=52d77d090b08407a9da7e9664017dc18&subaff1=872&subaff2=1532&zip=43222&lastName=Hernadez&gender=m&city=COLUMBUS&address1=269%20S%20Davis%20Ave%20Apt%20C&dobDay=26&firstName=Aaron&phoneNumber=6142240526&state=OH&dobYear=2002&dobMonth=10&email=hernadez%40gmail.com&age=23",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-21 01:08:07",
+    "screenshot_path": ""
+  },
+  {
+    "profile_id": "k1bp731p",
+    "state": "stuck",
+    "questions_answered": 22,
+    "url": "https://www.thnkspg.com/?apikey=e036cb56-9124-4447-a65d-ab7ab5145950&publisherid=5&placement=6&clickid=421ca2c80f5b4bc48dcab2bdbf193246&subaff1=872&subaff2=1532&zip=96814&lastName=Watson&gender=m&city=HONOLULU&address1=1065%20Kawaiahao%20St%20909&dobDay=05&firstName=Olisha&phoneNumber=8085412531&state=HI&dobMonth=04&dobYear=1970&email=owatson1435%40gmail.com&age=56",
+    "title": "",
+    "message": "Stuck after 10 retries — no question elements found",
+    "timestamp": "2026-04-21 01:09:16",
+    "screenshot_path": ""
+  }
+]

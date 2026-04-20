@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import enum
+import hashlib
 import json
 import random
 import re
@@ -80,6 +81,319 @@ def load_predefined_answers(data_file: str = "data.txt") -> dict[str, str]:
         log(f"Warning: Could not load predefined answers: {e}")
     
     return predefined
+
+
+class SurveyLearningStore:
+    """Persistent memory for answers that worked or failed in previous runs."""
+
+    def __init__(self, memory_file: str = "survey_memory.json") -> None:
+        self.path = Path(memory_file)
+        self.lock = threading.Lock()
+        self.data = self._load()
+
+    def _default_data(self) -> dict[str, Any]:
+        return {
+            "learned_answers": {},
+            "page_memory": {},
+            "recent_failures": [],
+            "profile_memory": {},
+        }
+
+    def _load(self) -> dict[str, Any]:
+        if not self.path.exists():
+            return self._default_data()
+        try:
+            loaded = json.loads(self.path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                return self._default_data() | loaded
+        except Exception:
+            pass
+        return self._default_data()
+
+    def _save_locked(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(
+            json.dumps(self.data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def _question_key(question_text: str) -> str:
+        return normalize_text(question_text)[:600]
+
+    @staticmethod
+    def _answer_key(answer_text: str) -> str:
+        return normalize_text(answer_text)[:200]
+
+    def build_page_signature(self, question_text: str, option_texts: list[str]) -> str:
+        normalized_question = self._question_key(question_text)
+        normalized_options = [self._answer_key(text) for text in option_texts[:12]]
+        payload = " || ".join([normalized_question] + normalized_options)
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:20]
+
+    def get_learned_answer(
+        self,
+        question_text: str,
+        option_texts: list[str],
+        page_signature: str,
+    ) -> str | None:
+        question_key = self._question_key(question_text)
+        normalized_options = [self._answer_key(text) for text in option_texts if self._answer_key(text)]
+        if not normalized_options:
+            return None
+
+        with self.lock:
+            question_memory = self.data.get("learned_answers", {}).get(question_key, {})
+            page_memory = self.data.get("page_memory", {}).get(page_signature, {})
+            page_success = page_memory.get("success_answers", {})
+            page_failure = page_memory.get("failed_answers", {})
+            preferred_answer = self._answer_key(page_memory.get("preferred_answer", ""))
+
+        best_option: str | None = None
+        best_score = 0
+
+        for option in normalized_options:
+            score = 0
+            q_stats = question_memory.get(option, {})
+            score += int(q_stats.get("success", 0)) * 5
+            score -= int(q_stats.get("failure", 0)) * 6
+            score += int(page_success.get(option, 0)) * 4
+            score -= int(page_failure.get(option, 0)) * 7
+            if preferred_answer and option == preferred_answer:
+                score += 3
+
+            if score > best_score:
+                best_score = score
+                best_option = option
+
+        return best_option if best_score > 0 else None
+
+    def remember_success(
+        self,
+        question_text: str,
+        answer_text: str,
+        option_texts: list[str],
+        page_signature: str,
+        source: str,
+    ) -> None:
+        question_key = self._question_key(question_text)
+        answer_key = self._answer_key(answer_text)
+        if not question_key or not answer_key:
+            return
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.lock:
+            learned_answers = self.data.setdefault("learned_answers", {})
+            question_bucket = learned_answers.setdefault(question_key, {})
+            answer_bucket = question_bucket.setdefault(
+                answer_key,
+                {"answer_text": answer_text, "success": 0, "failure": 0},
+            )
+            answer_bucket["answer_text"] = answer_text
+            answer_bucket["success"] = int(answer_bucket.get("success", 0)) + 1
+            answer_bucket["last_result"] = "success"
+            answer_bucket["last_source"] = source
+            answer_bucket["last_seen_at"] = timestamp
+
+            page_memory = self.data.setdefault("page_memory", {})
+            page_bucket = page_memory.setdefault(
+                page_signature,
+                {
+                    "question_text": question_key,
+                    "option_texts": option_texts[:12],
+                    "success_answers": {},
+                    "failed_answers": {},
+                },
+            )
+            page_bucket["question_text"] = question_key
+            page_bucket["option_texts"] = option_texts[:12]
+            page_bucket["preferred_answer"] = answer_text
+            page_bucket["last_result"] = "success"
+            page_bucket["last_seen_at"] = timestamp
+            success_answers = page_bucket.setdefault("success_answers", {})
+            success_answers[answer_key] = int(success_answers.get(answer_key, 0)) + 1
+
+            self._save_locked()
+
+    def remember_failure(
+        self,
+        question_text: str,
+        answer_text: str,
+        option_texts: list[str],
+        page_signature: str,
+        reason: str,
+        source: str,
+    ) -> None:
+        question_key = self._question_key(question_text)
+        answer_key = self._answer_key(answer_text)
+        if not question_key or not answer_key:
+            return
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.lock:
+            learned_answers = self.data.setdefault("learned_answers", {})
+            question_bucket = learned_answers.setdefault(question_key, {})
+            answer_bucket = question_bucket.setdefault(
+                answer_key,
+                {"answer_text": answer_text, "success": 0, "failure": 0},
+            )
+            answer_bucket["answer_text"] = answer_text
+            answer_bucket["failure"] = int(answer_bucket.get("failure", 0)) + 1
+            answer_bucket["last_result"] = "failure"
+            answer_bucket["last_source"] = source
+            answer_bucket["last_seen_at"] = timestamp
+            answer_bucket["last_reason"] = reason[:400]
+
+            page_memory = self.data.setdefault("page_memory", {})
+            page_bucket = page_memory.setdefault(
+                page_signature,
+                {
+                    "question_text": question_key,
+                    "option_texts": option_texts[:12],
+                    "success_answers": {},
+                    "failed_answers": {},
+                },
+            )
+            page_bucket["question_text"] = question_key
+            page_bucket["option_texts"] = option_texts[:12]
+            page_bucket["last_result"] = "failure"
+            page_bucket["last_seen_at"] = timestamp
+            page_bucket["last_reason"] = reason[:400]
+            failed_answers = page_bucket.setdefault("failed_answers", {})
+            failed_answers[answer_key] = int(failed_answers.get(answer_key, 0)) + 1
+
+            recent_failures = self.data.setdefault("recent_failures", [])
+            recent_failures.insert(
+                0,
+                {
+                    "timestamp": timestamp,
+                    "question_text": question_key,
+                    "answer_text": answer_text,
+                    "option_texts": option_texts[:12],
+                    "reason": reason[:400],
+                    "source": source,
+                    "page_signature": page_signature,
+                },
+            )
+            del recent_failures[200:]
+
+            self._save_locked()
+
+    def note_page_issue(
+        self,
+        question_text: str,
+        option_texts: list[str],
+        page_signature: str,
+        reason: str,
+    ) -> None:
+        question_key = self._question_key(question_text)
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.lock:
+            page_memory = self.data.setdefault("page_memory", {})
+            page_bucket = page_memory.setdefault(
+                page_signature,
+                {
+                    "question_text": question_key,
+                    "option_texts": option_texts[:12],
+                    "success_answers": {},
+                    "failed_answers": {},
+                },
+            )
+            page_bucket["question_text"] = question_key
+            page_bucket["option_texts"] = option_texts[:12]
+            page_bucket["last_result"] = "issue"
+            page_bucket["last_seen_at"] = timestamp
+            page_bucket["last_reason"] = reason[:400]
+            self._save_locked()
+
+    def get_profile_priority(self, profile_id: str) -> int:
+        profile_key = str(profile_id).strip()
+        if not profile_key:
+            return 0
+        with self.lock:
+            stats = self.data.get("profile_memory", {}).get(profile_key, {})
+        priority = 0
+        priority += int(stats.get("no_result_count", 0)) * 10
+        priority += int(stats.get("connect_failure_count", 0)) * 8
+        priority += int(stats.get("thread_crash_count", 0)) * 7
+        priority += int(stats.get("failed_count", 0)) * 4
+        priority += int(stats.get("stuck_count", 0)) * 3
+        priority -= int(stats.get("completed_count", 0))
+        return priority
+
+    def get_profile_attach_retry_count(self, profile_id: str, base_retries: int) -> int:
+        profile_key = str(profile_id).strip()
+        retries = max(1, int(base_retries))
+        if not profile_key:
+            return retries
+        with self.lock:
+            stats = self.data.get("profile_memory", {}).get(profile_key, {})
+        penalty = (
+            int(stats.get("no_result_count", 0))
+            + int(stats.get("connect_failure_count", 0))
+            + int(stats.get("thread_crash_count", 0))
+        )
+        return min(retries + penalty, retries + 4)
+
+    def get_discovery_retry_bonus(self) -> int:
+        with self.lock:
+            profile_memory = self.data.get("profile_memory", {})
+        if not profile_memory:
+            return 0
+        total_problem_profiles = 0
+        for stats in profile_memory.values():
+            issue_score = (
+                int(stats.get("no_result_count", 0))
+                + int(stats.get("connect_failure_count", 0))
+                + int(stats.get("thread_crash_count", 0))
+            )
+            if issue_score > 0:
+                total_problem_profiles += 1
+        return min(total_problem_profiles, 3)
+
+    def note_profile_result(self, profile_id: str, outcome: str, message: str = "") -> None:
+        profile_key = str(profile_id).strip()
+        if not profile_key:
+            return
+
+        outcome_key = normalize_text(outcome).replace(" ", "_") or "unknown"
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.lock:
+            profile_memory = self.data.setdefault("profile_memory", {})
+            stats = profile_memory.setdefault(
+                profile_key,
+                {
+                    "completed_count": 0,
+                    "disqualified_count": 0,
+                    "stuck_count": 0,
+                    "failed_count": 0,
+                    "connect_failure_count": 0,
+                    "thread_crash_count": 0,
+                    "no_result_count": 0,
+                },
+            )
+
+            count_field_map = {
+                "completed": "completed_count",
+                "disqualified": "disqualified_count",
+                "stuck": "stuck_count",
+                "failed": "failed_count",
+                "connect_failed": "connect_failure_count",
+                "thread_crashed": "thread_crash_count",
+                "no_result": "no_result_count",
+            }
+            count_field = count_field_map.get(outcome_key, "failed_count")
+            stats[count_field] = int(stats.get(count_field, 0)) + 1
+            stats["last_outcome"] = outcome_key
+            stats["last_message"] = str(message or "")[:400]
+            stats["last_seen_at"] = timestamp
+
+            if outcome_key in {"completed", "disqualified"}:
+                stats["no_result_count"] = 0
+                stats["connect_failure_count"] = 0
+                stats["thread_crash_count"] = 0
+
+            self._save_locked()
 
 
 # ===================================================================
@@ -507,11 +821,13 @@ class SurveyWorker:
         profile_id: str,
         config: dict[str, Any],
         predefined_answers: dict[str, str] | None = None,
+        learning_store: SurveyLearningStore | None = None,
     ) -> None:
         self.driver = driver
         self.profile_id = profile_id
         self.detector = QuestionDetector()
         self.predefined_answers = predefined_answers or {}
+        self.learning_store = learning_store
 
         self.max_questions: int = int(config.get("max_questions", 50))
         self.wait_after_click: float = float(config.get("wait_after_click_seconds", 3))
@@ -522,6 +838,7 @@ class SurveyWorker:
         self.screenshot_dir: str = str(config.get("screenshot_directory", "screenshots"))
         self.tab_index: int = int(config.get("tab_index", -1))
         self.target_url_contains: str = str(config.get("target_url_contains", "")).strip().lower()
+        self.lock_current_tab_on_start: bool = bool(config.get("lock_current_tab_on_start", True))
         self.completion_keywords: list[str] = [
             kw.lower() for kw in config.get("completion_keywords", [])
         ]
@@ -543,13 +860,17 @@ class SurveyWorker:
         self._required_predefined_answer_missing = False
         self._required_predefined_message = ""
         self._survey_tab_handle: str | None = None
+        self._current_question_context: dict[str, Any] | None = None
+        self._pending_answer_record: dict[str, Any] | None = None
+        self._session_answer_trail: list[dict[str, Any]] = []
+        self._learning_finalized = False
 
         self.result = SurveyResult(profile_id=self.profile_id)
 
     # ---- helpers --------------------------------------------------------
 
     def _focus_correct_tab(self) -> None:
-        """Switch to the most likely survey tab and avoid DevTools/internal tabs."""
+        """Keep the worker pinned to one survey tab and avoid cross-tab scanning."""
         try:
             handles = self.driver.window_handles
             if not handles:
@@ -571,20 +892,6 @@ class SurveyWorker:
                     switch_to(self._survey_tab_handle, "locked survey tab")
                 return
 
-            resolved_index = self.tab_index
-            if resolved_index < 0:
-                resolved_index = len(handles) + resolved_index
-            if 0 <= resolved_index < len(handles):
-                indexed_handle = handles[resolved_index]
-                try:
-                    self.driver.switch_to.window(indexed_handle)
-                    indexed_url = self.driver.current_url.lower()
-                    if self._is_content_url(indexed_url):
-                        switch_to(indexed_handle, f"configured tab_index={self.tab_index}")
-                        return
-                except WebDriverException:
-                    pass
-
             # 1) If user specified a target URL substring, prefer that tab
             if self.target_url_contains:
                 for handle in reversed(handles):
@@ -597,42 +904,40 @@ class SurveyWorker:
                     except WebDriverException:
                         continue
 
-            # 2) Score all content tabs and lock the one that looks most like the survey.
-            scored_handles: list[tuple[int, int, str, str]] = []
-            for idx, handle in enumerate(handles):
+            # 2) Respect an explicit non-negative tab index if one is configured.
+            if self.tab_index >= 0:
                 try:
-                    self.driver.switch_to.window(handle)
-                    url = self.driver.current_url.lower()
-                    if not self._is_content_url(url):
-                        continue
-                    score = self._get_current_tab_match_score(url)
-                    if handle == original_handle:
-                        score += 2
-                    if idx == len(handles) - 1:
-                        score += 1
-                    scored_handles.append((score, idx, handle, url))
+                    indexed_handle = handles[self.tab_index]
+                    self.driver.switch_to.window(indexed_handle)
+                    indexed_url = self.driver.current_url.lower()
+                    if self._is_content_url(indexed_url):
+                        switch_to(indexed_handle, f"configured tab_index={self.tab_index}")
+                        return
+                except (IndexError, WebDriverException):
+                    pass
+
+            # 3) By default, lock the currently active content tab and never scan others.
+            if self.lock_current_tab_on_start and original_handle and original_handle in handles:
+                try:
+                    current_url = self.driver.current_url.lower()
+                    if self._is_content_url(current_url):
+                        self._survey_tab_handle = original_handle
+                        return
                 except WebDriverException:
                     pass
 
-            content_handles = [handle for _, _, handle, _ in scored_handles]
+            # 4) Last-resort fallback only if the current tab is not usable.
+            for handle in reversed(handles):
+                try:
+                    self.driver.switch_to.window(handle)
+                    current_url = self.driver.current_url.lower()
+                    if self._is_content_url(current_url):
+                        switch_to(handle, "content tab fallback")
+                        return
+                except WebDriverException:
+                    continue
 
-            if not content_handles:
-                log("WARNING: All tabs are devtools/chrome pages - no content tab found!", self.profile_id)
-                self.driver.switch_to.window(handles[-1])
-                return
-
-            scored_handles.sort(key=lambda item: (item[0], item[1]))
-            best_score, _, best_handle, _ = scored_handles[-1]
-            if best_score > 0:
-                switch_to(best_handle, f"best survey tab score={best_score}")
-                return
-
-            # 3) No strong survey score - fall back to original content tab, else last content tab.
-            if original_handle and original_handle in content_handles:
-                switch_to(original_handle, "original content tab fallback")
-                return
-
-            switch_to(content_handles[-1], "content tab fallback")
+            log("WARNING: No usable content tab found for survey worker", self.profile_id)
 
         except WebDriverException as exc:
             log(f"Tab focus failed: {exc}", self.profile_id)
@@ -732,6 +1037,8 @@ class SurveyWorker:
             self.result.title = self.driver.title
         except WebDriverException:
             self.result.title = "(unreachable)"
+        if state != SurveyState.IN_PROGRESS:
+            self._finalize_learning(state, message)
         self.result.state = state.value
         self.result.message = message
         record_result(self.result)
@@ -1156,6 +1463,131 @@ class SurveyWorker:
             source_hash = 0
         return url, source_hash
 
+    def _page_changed_since(self, old_url: str, old_source_hash: int) -> bool:
+        try:
+            new_url = self.driver.current_url
+        except WebDriverException:
+            new_url = old_url
+        try:
+            new_hash = hash(self.driver.page_source)
+        except WebDriverException:
+            new_hash = old_source_hash
+        return (new_url != old_url) or (new_hash != old_source_hash)
+
+    def _extract_option_texts(self, elements: list[WebElement]) -> list[str]:
+        option_texts: list[str] = []
+        seen: set[str] = set()
+        for element in elements[:20]:
+            try:
+                text = self._get_element_match_text(element)
+            except WebDriverException:
+                text = ""
+            normalized = normalize_text(text)
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                option_texts.append(text or normalized)
+        return option_texts
+
+    def _build_question_context(
+        self,
+        q_type: QuestionType,
+        elements: list[WebElement],
+    ) -> dict[str, Any]:
+        question_text = self._get_current_question_text()[:600]
+        option_texts = self._extract_option_texts(elements)
+        page_signature = ""
+        if self.learning_store:
+            page_signature = self.learning_store.build_page_signature(question_text, option_texts)
+        return {
+            "question_text": question_text,
+            "option_texts": option_texts,
+            "page_signature": page_signature,
+            "question_type": q_type.value,
+        }
+
+    def _get_learned_answer(self) -> str | None:
+        if not self.learning_store or not self._current_question_context:
+            return None
+        learned_answer = self.learning_store.get_learned_answer(
+            question_text=self._current_question_context["question_text"],
+            option_texts=self._current_question_context["option_texts"],
+            page_signature=self._current_question_context["page_signature"],
+        )
+        if learned_answer:
+            log(f"Using learned answer from memory: {learned_answer}", self.profile_id)
+        return learned_answer
+
+    def _record_pending_answer(
+        self,
+        element: WebElement | None,
+        answer_text: str,
+        source: str,
+    ) -> None:
+        if not self._current_question_context:
+            return
+
+        resolved_text = normalize_text(answer_text)
+        if element is not None:
+            try:
+                element_text = self._get_element_match_text(element)
+            except WebDriverException:
+                element_text = ""
+            if element_text:
+                resolved_text = element_text
+
+        if not resolved_text:
+            return
+
+        self._pending_answer_record = {
+            "question_text": self._current_question_context["question_text"],
+            "option_texts": self._current_question_context["option_texts"],
+            "page_signature": self._current_question_context["page_signature"],
+            "answer_text": resolved_text,
+            "source": source,
+        }
+
+    def _commit_pending_answer_if_progressed(self, progressed: bool) -> None:
+        if not progressed or not self._pending_answer_record:
+            return
+        self._session_answer_trail.append(dict(self._pending_answer_record))
+        self._pending_answer_record = None
+
+    def _finalize_learning(self, state: SurveyState, message: str) -> None:
+        if self._learning_finalized or not self.learning_store:
+            return
+
+        if state == SurveyState.COMPLETED:
+            for record in self._session_answer_trail:
+                self.learning_store.remember_success(
+                    question_text=record["question_text"],
+                    answer_text=record["answer_text"],
+                    option_texts=record["option_texts"],
+                    page_signature=record["page_signature"],
+                    source=record["source"],
+                )
+        elif state in {SurveyState.DISQUALIFIED, SurveyState.STUCK, SurveyState.FAILED}:
+            failure_record = self._pending_answer_record or (
+                self._session_answer_trail[-1] if self._session_answer_trail else None
+            )
+            if failure_record:
+                self.learning_store.remember_failure(
+                    question_text=failure_record["question_text"],
+                    answer_text=failure_record["answer_text"],
+                    option_texts=failure_record["option_texts"],
+                    page_signature=failure_record["page_signature"],
+                    reason=message,
+                    source=failure_record["source"],
+                )
+            elif self._current_question_context:
+                self.learning_store.note_page_issue(
+                    question_text=self._current_question_context["question_text"],
+                    option_texts=self._current_question_context["option_texts"],
+                    page_signature=self._current_question_context["page_signature"],
+                    reason=message,
+                )
+
+        self._learning_finalized = True
+
     # ---- answer logic ---------------------------------------------------
 
     def _get_current_question_text(self) -> str:
@@ -1430,10 +1862,22 @@ class SurveyWorker:
             choice = self._find_element_by_text(radios, predefined_answer)
             if choice:
                 log(f"Selecting predefined radio: {predefined_answer}", self.profile_id)
-                return safe_click(self.driver, choice)
+                if safe_click(self.driver, choice):
+                    self._record_pending_answer(choice, predefined_answer, "predefined")
+                    return True
+                return False
             if is_strict:
                 self._mark_required_predefined_missing(predefined_answer, radios, "radio")
                 return False
+
+        learned_answer = self._get_learned_answer()
+        if learned_answer:
+            choice = self._find_element_by_text(radios, learned_answer)
+            if choice:
+                log(f"Selecting learned radio: {learned_answer}", self.profile_id)
+                if safe_click(self.driver, choice):
+                    self._record_pending_answer(choice, learned_answer, "memory")
+                    return True
 
         if not predefined_answer:
             choice = self._find_unknown_question_fallback_option(radios)
@@ -1443,7 +1887,10 @@ class SurveyWorker:
                 except WebDriverException:
                     label_text = "(unknown)"
                 log(f"Selecting fallback radio for unmapped question: {label_text}", self.profile_id)
-                return safe_click(self.driver, choice)
+                if safe_click(self.driver, choice):
+                    self._record_pending_answer(choice, label_text, "fallback")
+                    return True
+                return False
         
         # Smart random selection
         choice = self._get_preferred_random_option(radios)
@@ -1455,7 +1902,10 @@ class SurveyWorker:
         except WebDriverException:
             label_text = "(unknown)"
         log(f"Selecting radio: {label_text}", self.profile_id)
-        return safe_click(self.driver, choice)
+        if safe_click(self.driver, choice):
+            self._record_pending_answer(choice, label_text, "random")
+            return True
+        return False
 
     def _answer_checkbox(self, checkboxes: list[WebElement]) -> bool:
         """Select 1 checkbox: predefined, fallback opt-out, else smart random."""
@@ -1468,10 +1918,22 @@ class SurveyWorker:
             choice = self._find_element_by_text(checkboxes, predefined_answer)
             if choice:
                 log(f"Selecting predefined checkbox: {predefined_answer}", self.profile_id)
-                return safe_click(self.driver, choice)
+                if self._select_single_checkbox(checkboxes, choice):
+                    self._record_pending_answer(choice, predefined_answer, "predefined")
+                    return True
+                return False
             if is_strict:
                 self._mark_required_predefined_missing(predefined_answer, checkboxes, "checkbox")
                 return False
+
+        learned_answer = self._get_learned_answer()
+        if learned_answer:
+            choice = self._find_element_by_text(checkboxes, learned_answer)
+            if choice:
+                log(f"Selecting learned checkbox: {learned_answer}", self.profile_id)
+                if self._select_single_checkbox(checkboxes, choice):
+                    self._record_pending_answer(choice, learned_answer, "memory")
+                    return True
 
         if not predefined_answer:
             choice = self._find_unknown_question_fallback_option(checkboxes)
@@ -1481,7 +1943,10 @@ class SurveyWorker:
                 except WebDriverException:
                     label_text = "(unknown)"
                 log(f"Selecting fallback checkbox for unmapped question: {label_text}", self.profile_id)
-                return self._select_single_checkbox(checkboxes, choice)
+                if self._select_single_checkbox(checkboxes, choice):
+                    self._record_pending_answer(choice, label_text, "fallback")
+                    return True
+                return False
         
         # Smart random selection (pick 1)
         choice = self._get_preferred_random_option(checkboxes)
@@ -1493,7 +1958,10 @@ class SurveyWorker:
         except WebDriverException:
             label_text = "(unknown)"
         log(f"Selecting checkbox: {label_text}", self.profile_id)
-        return self._select_single_checkbox(checkboxes, choice)
+        if self._select_single_checkbox(checkboxes, choice):
+            self._record_pending_answer(choice, label_text, "random")
+            return True
+        return False
 
     def _select_single_checkbox(
         self,
@@ -1565,16 +2033,27 @@ class SurveyWorker:
                     if choice:
                         log(f"Selecting predefined dropdown: {predefined_answer}", self.profile_id)
                         sel.select_by_value(choice.get_attribute("value"))
+                        self._record_pending_answer(choice, predefined_answer, "predefined")
                         return True
                     if is_strict:
                         self._mark_required_predefined_missing(predefined_answer, valid_options, "dropdown")
                         return False
+
+                learned_answer = self._get_learned_answer()
+                if learned_answer:
+                    choice = self._find_element_by_text(valid_options, learned_answer)
+                    if choice:
+                        log(f"Selecting learned dropdown: {learned_answer}", self.profile_id)
+                        sel.select_by_value(choice.get_attribute("value"))
+                        self._record_pending_answer(choice, learned_answer, "memory")
+                        return True
 
                 if not predefined_answer:
                     choice = self._find_unknown_question_fallback_option(valid_options)
                     if choice:
                         log(f"Selecting fallback dropdown for unmapped question: {choice.text[:50]}", self.profile_id)
                         sel.select_by_value(choice.get_attribute("value"))
+                        self._record_pending_answer(choice, choice.text[:50], "fallback")
                         return True
                 
                 # Smart random selection
@@ -1584,6 +2063,7 @@ class SurveyWorker:
                 
                 log(f"Selecting dropdown: {choice.text[:50]}", self.profile_id)
                 sel.select_by_value(choice.get_attribute("value"))
+                self._record_pending_answer(choice, choice.text[:50], "random")
                 return True
         except WebDriverException as exc:
             log(f"Dropdown selection failed: {exc}", self.profile_id)
@@ -1600,10 +2080,22 @@ class SurveyWorker:
             choice = self._find_element_by_text(buttons, predefined_answer)
             if choice:
                 log(f"Clicking predefined answer button: {predefined_answer}", self.profile_id)
-                return safe_click(self.driver, choice)
+                if safe_click(self.driver, choice):
+                    self._record_pending_answer(choice, predefined_answer, "predefined")
+                    return True
+                return False
             if is_strict:
                 self._mark_required_predefined_missing(predefined_answer, buttons, "button")
                 return False
+
+        learned_answer = self._get_learned_answer()
+        if learned_answer:
+            choice = self._find_element_by_text(buttons, learned_answer)
+            if choice:
+                log(f"Clicking learned answer button: {learned_answer}", self.profile_id)
+                if safe_click(self.driver, choice):
+                    self._record_pending_answer(choice, learned_answer, "memory")
+                    return True
 
         if not predefined_answer:
             choice = self._find_unknown_question_fallback_option(buttons)
@@ -1613,7 +2105,10 @@ class SurveyWorker:
                 except WebDriverException:
                     label_text = "(unknown)"
                 log(f"Clicking fallback answer for unmapped question: {label_text}", self.profile_id)
-                return safe_click(self.driver, choice)
+                if safe_click(self.driver, choice):
+                    self._record_pending_answer(choice, label_text, "fallback")
+                    return True
+                return False
         
         # Smart random selection
         choice = self._get_preferred_random_option(buttons)
@@ -1625,7 +2120,10 @@ class SurveyWorker:
         except WebDriverException:
             label_text = "(unknown)"
         log(f"Clicking answer button: {label_text}", self.profile_id)
-        return safe_click(self.driver, choice)
+        if safe_click(self.driver, choice):
+            self._record_pending_answer(choice, label_text, "random")
+            return True
+        return False
 
     def _answer_text_input(self, inputs: list[WebElement]) -> bool:
         """Type a generic answer into text inputs."""
@@ -1647,6 +2145,8 @@ class SurveyWorker:
         """Route to the appropriate answer method based on question type."""
         self._required_predefined_answer_missing = False
         self._required_predefined_message = ""
+        self._current_question_context = self._build_question_context(q_type, elements)
+        self._pending_answer_record = None
         if q_type == QuestionType.RADIO:
             return self._answer_radio(elements)
         if q_type == QuestionType.CHECKBOX:
@@ -1693,12 +2193,7 @@ class SurveyWorker:
                     if safe_click(self.driver, promo_no_choice):
                         log("Clicked promotional opt-out answer: no", self.profile_id)
                         time.sleep(0.5)
-                        try:
-                            new_url = self.driver.current_url
-                            new_hash = hash(self.driver.page_source)
-                            page_changed = (new_url != old_url) or (new_hash != old_source_hash)
-                        except WebDriverException:
-                            page_changed = False
+                        page_changed = self._page_changed_since(old_url, old_source_hash)
 
                         if not page_changed:
                             if self._click_continue():
@@ -1742,12 +2237,7 @@ class SurveyWorker:
                 old_url, old_source_hash = self._get_page_snapshot()
                 if self._try_direct_answer_recovery():
                     time.sleep(0.5)
-                    try:
-                        new_url = self.driver.current_url
-                        new_hash = hash(self.driver.page_source)
-                        page_changed = (new_url != old_url) or (new_hash != old_source_hash)
-                    except WebDriverException:
-                        page_changed = False
+                    page_changed = self._page_changed_since(old_url, old_source_hash)
 
                     if not page_changed:
                         if self._click_continue():
@@ -1783,6 +2273,14 @@ class SurveyWorker:
                         return self.result
 
                     self.result.questions_answered = question_num - 1
+                    if self.learning_store:
+                        current_question_text = self._get_current_question_text()[:600]
+                        self.learning_store.note_page_issue(
+                            question_text=current_question_text,
+                            option_texts=[],
+                            page_signature=self.learning_store.build_page_signature(current_question_text, []),
+                            reason=f"Stuck after {self.max_stuck_retries} retries with no question elements",
+                        )
                     self._update_result(
                         SurveyState.STUCK,
                         f"Stuck after {self.max_stuck_retries} retries — no question elements found",
@@ -1826,12 +2324,7 @@ class SurveyWorker:
             # ---- Click Continue/Next ----
             # For button_options, clicking the button itself may advance
             # the page, so check if page already changed
-            try:
-                new_url = self.driver.current_url
-                new_hash = hash(self.driver.page_source)
-                page_changed = (new_url != old_url) or (new_hash != old_source_hash)
-            except WebDriverException:
-                page_changed = False
+            page_changed = self._page_changed_since(old_url, old_source_hash)
 
             if not page_changed:
                 clicked = self._click_continue()
@@ -1845,6 +2338,7 @@ class SurveyWorker:
                 log("Page already changed after answer click", self.profile_id)
                 time.sleep(1)  # settle time
 
+            self._commit_pending_answer_if_progressed(self._page_changed_since(old_url, old_source_hash))
             self.result.questions_answered = question_num
 
         # ---- Max questions reached ----
@@ -1879,25 +2373,33 @@ class SurveyAgent:
         self.adspower_config = config.get("adspower", {})
         self.survey_config = config.get("survey", {})
         self.client = AdsPowerClient(self.adspower_config)
+        self.learning_store = SurveyLearningStore(
+            str(self.survey_config.get("memory_file", "survey_memory.json"))
+        )
         self.results: list[SurveyResult] = []
         self._results_lock = threading.Lock()
         self._profile_connect_lock = threading.Lock()
-        self.attach_retries: int = max(1, int(self.survey_config.get("attach_retries", 3)))
+        self.discovery_retry_bonus: int = self.learning_store.get_discovery_retry_bonus()
+        self.attach_retries: int = max(1, int(self.survey_config.get("attach_retries", 4)))
         self.attach_retry_delay: float = max(
-            0.5,
-            float(self.survey_config.get("attach_retry_delay_seconds", 2)),
+            0.25,
+            float(self.survey_config.get("attach_retry_delay_seconds", 1)),
         )
         self.profile_discovery_retries: int = max(
             1,
-            int(self.survey_config.get("profile_discovery_retries", 4)),
+            int(self.survey_config.get("profile_discovery_retries", 3)) + self.discovery_retry_bonus,
+        )
+        self.profile_discovery_stable_rounds: int = max(
+            1,
+            int(self.survey_config.get("profile_discovery_stable_rounds", 1)),
         )
         self.profile_discovery_wait: float = max(
-            0.5,
-            float(self.survey_config.get("profile_discovery_wait_seconds", 1.5)),
+            0.25,
+            float(self.survey_config.get("profile_discovery_wait_seconds", 0.75)),
         )
         self.thread_start_stagger: float = max(
             0.0,
-            float(self.survey_config.get("thread_start_stagger_seconds", 0.25)),
+            float(self.survey_config.get("thread_start_stagger_seconds", 0.0)),
         )
         
         # Load predefined answers
@@ -1910,6 +2412,8 @@ class SurveyAgent:
 
     def _collect_active_profiles(self) -> list[dict[str, Any]]:
         discovered: dict[str, dict[str, Any]] = {}
+        stable_rounds = 0
+        last_count = -1
 
         for attempt in range(1, self.profile_discovery_retries + 1):
             active = self.client.list_active_profiles()
@@ -1921,6 +2425,16 @@ class SurveyAgent:
             log(
                 f"Active profile discovery {attempt}/{self.profile_discovery_retries}: {len(discovered)} unique profile(s)",
             )
+
+            current_count = len(discovered)
+            if current_count == last_count:
+                stable_rounds += 1
+            else:
+                stable_rounds = 0
+            last_count = current_count
+
+            if current_count > 0 and stable_rounds >= self.profile_discovery_stable_rounds:
+                break
 
             if attempt < self.profile_discovery_retries:
                 time.sleep(self.profile_discovery_wait)
@@ -1961,6 +2475,10 @@ class SurveyAgent:
                         "browser_data": profile_data,
                     }
                 )
+            profiles.sort(
+                key=lambda profile: self.learning_store.get_profile_priority(str(profile.get("user_id", ""))),
+                reverse=True,
+            )
             return profiles
 
         raise RuntimeError("No ADSPower profiles configured.")
@@ -1977,19 +2495,169 @@ class SurveyAgent:
                 return profile_data
         return None
 
+    def _merge_missing_active_profiles(self, profiles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        explicit_ids = [
+            str(pid).strip()
+            for pid in self.adspower_config.get("profile_ids", [])
+            if str(pid).strip()
+        ]
+        if explicit_ids:
+            return list(profiles)
+
+        if not bool(self.adspower_config.get("use_active_profiles", True)):
+            return list(profiles)
+
+        merged_profiles = list(profiles)
+        known_ids = {
+            str(profile.get("user_id", "")).strip()
+            for profile in merged_profiles
+            if str(profile.get("user_id", "")).strip()
+        }
+
+        refreshed_active = self._collect_active_profiles()
+        added_ids: list[str] = []
+        for profile_data in refreshed_active:
+            pid = str(profile_data.get("user_id", "")).strip()
+            if not pid or pid in known_ids:
+                continue
+            merged_profiles.append(
+                {
+                    "user_id": pid,
+                    "connect_mode": "attach",
+                    "browser_data": profile_data,
+                }
+            )
+            known_ids.add(pid)
+            added_ids.append(pid)
+
+        if added_ids:
+            log(f"Added missing active profile(s) after refresh: {', '.join(sorted(added_ids))}")
+
+        return merged_profiles
+
+    def _run_profile_batch(self, profiles: list[dict[str, Any]]) -> None:
+        threads: list[threading.Thread] = []
+        for profile in profiles:
+            t = threading.Thread(
+                target=self._worker_thread,
+                args=(profile,),
+                daemon=False,
+            )
+            threads.append(t)
+            t.start()
+            if self.thread_start_stagger:
+                time.sleep(self.thread_start_stagger)
+
+        for t in threads:
+            t.join()
+
+    def _launch_profile_threads(
+        self,
+        profiles: list[dict[str, Any]],
+        launched_profile_ids: set[str],
+        threads_by_profile_id: dict[str, threading.Thread],
+    ) -> list[str]:
+        started_ids: list[str] = []
+        for profile in profiles:
+            profile_id = str(profile.get("user_id", "")).strip()
+            if not profile_id or profile_id in launched_profile_ids:
+                continue
+
+            thread = threading.Thread(
+                target=self._worker_thread,
+                args=(profile,),
+                daemon=False,
+            )
+            launched_profile_ids.add(profile_id)
+            threads_by_profile_id[profile_id] = thread
+            started_ids.append(profile_id)
+            thread.start()
+            if self.thread_start_stagger:
+                time.sleep(self.thread_start_stagger)
+        return started_ids
+
+    def _discover_late_profiles(self, launched_profile_ids: set[str]) -> list[dict[str, Any]]:
+        explicit_ids = [
+            str(pid).strip()
+            for pid in self.adspower_config.get("profile_ids", [])
+            if str(pid).strip()
+        ]
+        if explicit_ids or not bool(self.adspower_config.get("use_active_profiles", True)):
+            return []
+
+        late_profiles: list[dict[str, Any]] = []
+        stable_rounds = 0
+        last_seen_count = -1
+
+        for attempt in range(1, self.profile_discovery_retries + 1):
+            try:
+                active = self.client.list_active_profiles()
+            except Exception as exc:
+                log(f"Late profile discovery failed on attempt {attempt}: {exc}")
+                active = []
+
+            active_ids: set[str] = set()
+            new_profiles_this_round: list[dict[str, Any]] = []
+            for profile_data in active:
+                pid = str(profile_data.get("user_id", "")).strip()
+                if not pid:
+                    continue
+                active_ids.add(pid)
+                if pid in launched_profile_ids:
+                    continue
+                new_profiles_this_round.append(
+                    {
+                        "user_id": pid,
+                        "connect_mode": "attach",
+                        "browser_data": profile_data,
+                    }
+                )
+
+            if new_profiles_this_round:
+                late_profiles.extend(new_profiles_this_round)
+                for profile in new_profiles_this_round:
+                    launched_profile_ids.add(str(profile["user_id"]))
+                log(
+                    "Late profile discovery found new profile(s): "
+                    + ", ".join(str(profile["user_id"]) for profile in new_profiles_this_round)
+                )
+
+            current_count = len(active_ids)
+            if current_count == last_seen_count:
+                stable_rounds += 1
+            else:
+                stable_rounds = 0
+            last_seen_count = current_count
+
+            if active_ids and stable_rounds >= self.profile_discovery_stable_rounds:
+                break
+
+            if attempt < self.profile_discovery_retries:
+                time.sleep(self.profile_discovery_wait)
+
+        # launched_profile_ids is only for de-dup during discovery; remove late profiles so they can be started.
+        for profile in late_profiles:
+            launched_profile_ids.discard(str(profile["user_id"]))
+
+        return late_profiles
+
     def _connect_profile_driver(self, profile: dict[str, Any]) -> webdriver.Chrome:
         profile_id = str(profile["user_id"])
         connect_mode = str(profile.get("connect_mode", "attach")).strip().lower()
         browser_data = profile.get("browser_data")
         last_error: Exception | None = None
+        effective_attach_retries = self.learning_store.get_profile_attach_retry_count(
+            profile_id,
+            self.attach_retries,
+        )
 
-        for attempt in range(1, self.attach_retries + 1):
+        for attempt in range(1, effective_attach_retries + 1):
             try:
                 if connect_mode == "start":
                     with self._profile_connect_lock:
                         driver, _ = self.client.start_profile(profile_id)
                     log(
-                        f"Connected to profile on attempt {attempt}/{self.attach_retries}",
+                        f"Connected to profile on attempt {attempt}/{effective_attach_retries}",
                         profile_id,
                     )
                     return driver
@@ -2004,10 +2672,9 @@ class SurveyAgent:
                 if not current_browser_data:
                     raise RuntimeError("Profile is not present in AdsPower local-active list")
 
-                with self._profile_connect_lock:
-                    driver = self.client.attach_to_active_profile(current_browser_data)
+                driver = self.client.attach_to_active_profile(current_browser_data)
                 log(
-                    f"Attached to active profile on attempt {attempt}/{self.attach_retries}",
+                    f"Attached to active profile on attempt {attempt}/{effective_attach_retries}",
                     profile_id,
                 )
                 return driver
@@ -2015,14 +2682,14 @@ class SurveyAgent:
                 last_error = exc
                 action = "start" if connect_mode == "start" else "attach"
                 log(
-                    f"Could not {action} profile on attempt {attempt}/{self.attach_retries}: {exc}",
+                    f"Could not {action} profile on attempt {attempt}/{effective_attach_retries}: {exc}",
                     profile_id,
                 )
-                if attempt < self.attach_retries:
+                if attempt < effective_attach_retries:
                     time.sleep(self.attach_retry_delay)
 
         raise RuntimeError(
-            f"Could not connect to profile after {self.attach_retries} attempts: {last_error}"
+            f"Could not connect to profile after {effective_attach_retries} attempts: {last_error}"
         )
 
     def _worker_thread(self, profile: dict[str, Any]) -> None:
@@ -2033,6 +2700,7 @@ class SurveyAgent:
             driver = self._connect_profile_driver(profile)
         except Exception as exc:
             log(f"Worker could not connect to profile: {exc}", profile_id)
+            self.learning_store.note_profile_result(profile_id, "connect_failed", str(exc))
             error_result = SurveyResult(
                 profile_id=profile_id,
                 state=SurveyState.FAILED.value,
@@ -2048,11 +2716,14 @@ class SurveyAgent:
                 profile_id=profile_id,
                 config=self.survey_config,
                 predefined_answers=self.predefined_answers,
+                learning_store=self.learning_store,
             )
             result = worker.run()
+            self.learning_store.note_profile_result(profile_id, result.state, result.message)
             self._append_result(result)
         except Exception as exc:
             log(f"Survey thread crashed: {exc}", profile_id)
+            self.learning_store.note_profile_result(profile_id, "thread_crashed", str(exc))
             error_result = SurveyResult(
                 profile_id=profile_id,
                 state=SurveyState.FAILED.value,
@@ -2076,21 +2747,62 @@ class SurveyAgent:
         profile_ids = ", ".join(str(profile["user_id"]) for profile in profiles)
         if profile_ids:
             log(f"Target profile IDs: {profile_ids}")
+        expected_profile_ids = {
+            str(profile.get("user_id", "")).strip()
+            for profile in profiles
+            if str(profile.get("user_id", "")).strip()
+        }
 
-        threads: list[threading.Thread] = []
-        for profile in profiles:
-            t = threading.Thread(
-                target=self._worker_thread,
-                args=(profile,),
-                daemon=False,
+        launched_profile_ids: set[str] = set()
+        threads_by_profile_id: dict[str, threading.Thread] = {}
+        self._launch_profile_threads(profiles, launched_profile_ids, threads_by_profile_id)
+
+        late_profiles = self._discover_late_profiles(launched_profile_ids)
+        if late_profiles:
+            late_ids = ", ".join(str(profile["user_id"]) for profile in late_profiles)
+            log(f"Launching late-discovered profile(s): {late_ids}")
+            profiles.extend(late_profiles)
+            expected_profile_ids.update(str(profile["user_id"]) for profile in late_profiles)
+            self._launch_profile_threads(late_profiles, launched_profile_ids, threads_by_profile_id)
+
+        for thread in threads_by_profile_id.values():
+            thread.join()
+
+        result_profile_ids = {result.profile_id for result in self.results}
+        missing_ids = sorted(expected_profile_ids - result_profile_ids)
+        if missing_ids:
+            retry_profiles = [
+                profile
+                for profile in profiles
+                if str(profile.get("user_id", "")).strip() in set(missing_ids)
+            ]
+            if retry_profiles:
+                log(
+                    "Launching recovery batch for profiles with no recorded result: "
+                    + ", ".join(str(profile["user_id"]) for profile in retry_profiles)
+                )
+                recovery_launched_ids: set[str] = set()
+                recovery_threads: dict[str, threading.Thread] = {}
+                self._launch_profile_threads(retry_profiles, recovery_launched_ids, recovery_threads)
+                for thread in recovery_threads.values():
+                    thread.join()
+                result_profile_ids = {result.profile_id for result in self.results}
+                missing_ids = sorted(expected_profile_ids - result_profile_ids)
+
+        for missing_id in missing_ids:
+            log("No result was recorded for discovered profile after recovery passes", missing_id)
+            self.learning_store.note_profile_result(
+                missing_id,
+                "no_result",
+                "No result was recorded for this discovered profile after recovery passes.",
             )
-            threads.append(t)
-            t.start()
-            if self.thread_start_stagger:
-                time.sleep(self.thread_start_stagger)
-
-        for t in threads:
-            t.join()
+            error_result = SurveyResult(
+                profile_id=missing_id,
+                state=SurveyState.FAILED.value,
+                message="No result was recorded for this discovered profile after recovery passes.",
+            )
+            error_result.refresh_timestamp()
+            self._append_result(error_result)
 
         # ---- Save log file ----
         log_dir = self.survey_config.get("log_directory", "logs")
